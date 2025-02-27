@@ -305,6 +305,12 @@ class FileUploadService {
       callback?: (file: { root: string; file: FileType | null }, context: any) => void;
     },
   ): Promise<PendingFileType[]> {
+    
+    // reset the upload status when creating a new document
+    if (fileList.length === 1 && fileList[0].root === fileList[0].file.name) {
+      this.pauseOrResume();
+    }
+
     // if we're uploading one file directly, do the size calc first
     for (const file of fileList) {
       if (file.root && file.file?.name && file.root === file.file.name) {
