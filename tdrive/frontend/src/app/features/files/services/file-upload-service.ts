@@ -12,8 +12,6 @@ import FileUploadAPIClient from '../api/file-upload-api-client';
 import { isPendingFileStatusPending } from '../utils/pending-files';
 import { FileTreeObject } from 'components/uploads/file-tree-utils';
 import { DriveApiClient } from 'features/drive/api-client/api-client';
-import { ToasterService } from 'app/features/global/services/toaster-service';
-import Languages from 'app/features/global/services/languages-service';
 import { DriveItem, DriveItemVersion } from 'app/features/drive/types';
 
 export enum Events {
@@ -50,6 +48,7 @@ class FileUploadService {
   public currentTaskId = '';
   public parentId = '';
   public uploadStatus = UploadStateEnum.Progress;
+  private companyId = '';
   private recoilHandler: Function = () => undefined;
   private logger: Logger.Logger = Logger.getLogger('FileUploadService');
 
@@ -62,6 +61,9 @@ class FileUploadService {
    * @private
    */
   async _waitWhilePaused(id?: string) {
+    logger.debug('===== _waitWhilePaused ======');
+    logger.debug('rootStates: ', this.rootStates);
+    logger.debug('status: ', this.uploadStatus)
     while (this.uploadStatus === UploadStateEnum.Paused || (id && this.rootStates.paused[id])) {
       if (this.uploadStatus === UploadStateEnum.Cancelled || (id && this.rootStates.cancelled[id]))
         return;
@@ -84,9 +86,17 @@ class FileUploadService {
     const updatedState = Object.keys(this.groupedPendingFiles).reduce((acc: any, key: string) => {
       // Calculate the uploaded size
       const uploadedSize = this.groupedPendingFiles[key]
-        .map((f: PendingFileType) =>
-          f.status === 'success' && f.originalFile?.size ? f.originalFile.size : 0,
-        )
+        .map((file: PendingFileType) => {
+          const fileSize = file.originalFile?.size ?? 0;
+
+          if (file.status === 'success') {
+            return fileSize;
+          } else if (file.status === 'pending') {
+            return fileSize * (file.progress ?? 0); // Ensure progress is defined
+          }
+
+          return 0;
+        })
         .reduce((acc: number, size: number) => acc + size, 0);
 
       // Check for failed files
@@ -131,6 +141,7 @@ class FileUploadService {
   ) {
     // reset the upload status
     this.uploadStatus = UploadStateEnum.Progress;
+    this.companyId = context.companyId;
 
     const root = tree.tree;
     this.rootSizes = this.rootSizes = {
@@ -200,7 +211,7 @@ class FileUploadService {
               item: item,
               version: {},
             });
-            this.groupIds[directory] = driveItem.id;
+            if (!this.groupIds[directory]) this.groupIds[directory] = driveItem.id;
             this.logger.debug(`Directory ${directory} created`);
             pendingFile.status = 'success';
             this.notify();
@@ -250,12 +261,16 @@ class FileUploadService {
             } as Partial<DriveItemVersion>;
 
             // create the document
-            const documentId = await DriveApiClient.create(context.companyId, { item, version });
-            // assign the group id with the document id
-            if (isFileRoot) {
-              this.groupIds[root] = documentId.id;
-              // set the id for the root
-              this.notify();
+            try {
+              const documentId = await DriveApiClient.create(context.companyId, { item, version });
+              // assign the group id with the document id
+              if (isFileRoot) {
+                this.groupIds[root] = documentId.id;
+                // set the id for the root
+                this.notify();
+              }
+            } catch (error) {
+              logger.error('Error while creating document', error);
             }
           }
         },
@@ -291,6 +306,23 @@ class FileUploadService {
       callback?: (file: { root: string; file: FileType | null }, context: any) => void;
     },
   ): Promise<PendingFileType[]> {
+    logger.debug('===== upload =====');
+    logger.debug('uploadStatus: ', this.uploadStatus);
+    
+    // reset the upload status when creating a new document
+    if (fileList.length === 1 && fileList[0].root === fileList[0].file.name) {
+      if (this.uploadStatus === UploadStateEnum.Paused) {
+        this.uploadStatus = UploadStateEnum.Progress;
+      }
+    }
+
+    // if we're uploading one file directly, do the size calc first
+    for (const file of fileList) {
+      if (file.root && file.file?.name && file.root === file.file.name) {
+        this.rootSizes[file.root] = file.file.size;
+      }
+    }
+
     const { companyId } = RouterServices.getStateFromRoute();
 
     if (!fileList || !companyId) {
@@ -427,6 +459,8 @@ class FileUploadService {
 
   public cancelUpload() {
     this.uploadStatus = UploadStateEnum.Cancelled;
+    // copy the group ids
+    const rootItemIds = _.cloneDeep(this.groupIds);
 
     // pause or resume the resumable tasks
     const fileToCancel = this.pendingFiles;
@@ -455,6 +489,17 @@ class FileUploadService {
       }
     }
 
+    // delete the roots in progress
+    for (const rootItem of Object.keys(rootItemIds)) {
+      const rootItemId = rootItemIds[rootItem];
+      // check if the root completed skip it
+      if (this.rootStates.completed[rootItem]) continue;
+      this.deleteOneDriveItem({
+        companyId: this.companyId,
+        id: rootItemId,
+      });
+    }
+
     // clean everything
     this.pendingFiles = [];
     this.groupedPendingFiles = {};
@@ -466,6 +511,7 @@ class FileUploadService {
 
   public cancelRootUpload(id: string) {
     this.rootStates.cancelled[id] = true;
+    const rootItemId = this.groupIds[id];
     // if it's 1 root, cancel the upload
     if (Object.keys(this.groupedPendingFiles).length === 1) {
       this.cancelUpload();
@@ -507,6 +553,12 @@ class FileUploadService {
       // remove the root id
       delete this.groupIds[id];
       this.notify();
+
+      // delete the root
+      this.deleteOneDriveItem({
+        companyId: this.companyId,
+        id: rootItemId,
+      });
     }
   }
 
@@ -666,6 +718,20 @@ class FileUploadService {
     }
   }
 
+  public async deleteOneDriveItem({
+    companyId,
+    id,
+  }: {
+    companyId: string;
+    id: string;
+  }): Promise<void> {
+    try {
+      await DriveApiClient.remove(companyId, id);
+    } catch (error) {
+      logger.error('Error while deleting drive item ', error);
+    }
+  }
+
   public download({ companyId, fileId }: { companyId: string; fileId: string }): Promise<Blob> {
     return FileUploadAPIClient.download({
       companyId: companyId,
@@ -684,6 +750,28 @@ class FileUploadService {
     this.groupedPendingFiles = {};
     this.groupIds = {};
     this.notify();
+  }
+
+  public resetStates(ids: string[]) {
+    this.logger.debug('===== START resetStates =====');
+    this.logger.debug('groupedPendingFiles: ', this.groupedPendingFiles);
+    this.logger.debug('groupIds: ', this.groupIds);
+    this.logger.debug('rootStates: ', this.rootStates);
+
+    this.uploadStatus = UploadStateEnum.Progress;
+    for (const id of ids) {
+      delete this.groupedPendingFiles[id];
+      delete this.groupIds[id];
+      delete this.rootStates.paused[id];
+      delete this.rootStates.completed[id];
+      delete this.rootStates.failed[id];
+      delete this.rootStates.cancelled[id];
+    }
+
+    this.logger.debug('===== END resetStates =====');
+    this.logger.debug('groupedPendingFiles: ', this.groupedPendingFiles);
+    this.logger.debug('groupIds: ', this.groupIds);
+    this.logger.debug('rootStates: ', this.rootStates);
   }
 }
 
