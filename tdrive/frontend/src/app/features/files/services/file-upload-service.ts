@@ -289,6 +289,13 @@ class FileUploadService {
       return { [key]: root[key] };
     });
 
+    // Reset existing uploads
+    for (const rootKey of rootKeys) {
+      if (rootKey in this.groupIds) {
+        this.resetStates([rootKey]);
+      }
+    }
+
     // tree promises
     const treePromises = rootTrees.map(tree => {
       return traverserTreeLevel(tree, context.parentId, true);
