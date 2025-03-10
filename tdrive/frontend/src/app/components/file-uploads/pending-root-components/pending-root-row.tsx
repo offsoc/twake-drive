@@ -33,7 +33,7 @@ const PendingRootRow = ({
   const uploadedFilesSize = root.uploadedSize;
   const uploadProgress = Math.floor((uploadedFilesSize / root.size) * 100);
   const isUploadCompleted = root.status === 'completed';
-  const isFileRoot = rootKey.includes('.');
+  const isFileRoot = root.isUnknownFormat || rootKey.includes('.');
   const fileType = isFileRoot ? rootKey.split('.').pop() : '';
 
   // Callback function to open the folder after the upload is completed
@@ -116,6 +116,8 @@ const PendingRootRow = ({
     return rootName;
   };
 
+  const showFileFolderTestId = !showFolder || isFileRoot ? 'testid:upload-root-modal-row-show-file' : 'testid:upload-root-modal-row-show-folder';
+
   return (
     <div className="root-row testid:upload-root-modal-row">
       <div className="root-details mt-2">
@@ -141,7 +143,7 @@ const PendingRootRow = ({
             {isUploadCompleted ? (
               <button
                 onClick={handleShowFolder}
-                className="hover:bg-gray-100 p-2 rounded-md transition-all duration-200 testid:upload-root-modal-row-show-folder"
+                className={`hover:bg-gray-100 p-2 rounded-md transition-all duration-200 ${showFileFolderTestId}`}
               >
                 {!isFileRoot && (
                   <>
@@ -165,7 +167,7 @@ const PendingRootRow = ({
               !['cancelled', 'failed'].includes(root.status) &&
               root?.status !== 'error' && (
                 <>
-                  {root.status === 'failed' ? (
+                  {root.status === 'paused' ? (
                     <button
                       onClick={() => pauseOrResumeRootUpload(rootKey)}
                       className="hover:bg-blue-100 p-2 rounded-md transition-all duration-200 testid:upload-root-modal-row-resume"

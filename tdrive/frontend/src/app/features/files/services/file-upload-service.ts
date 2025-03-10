@@ -63,7 +63,7 @@ class FileUploadService {
   async _waitWhilePaused(id?: string) {
     logger.debug('===== _waitWhilePaused ======');
     logger.debug('rootStates: ', this.rootStates);
-    logger.debug('status: ', this.uploadStatus)
+    logger.debug('status: ', this.uploadStatus);
     while (this.uploadStatus === UploadStateEnum.Paused || (id && this.rootStates.paused[id])) {
       if (this.uploadStatus === UploadStateEnum.Cancelled || (id && this.rootStates.cancelled[id]))
         return;
@@ -105,6 +105,11 @@ class FileUploadService {
         this.rootStates.failed[key] = true;
       }
 
+      // Check if the root is a file with unknow format
+      const isUnknownFormat =
+        this.groupedPendingFiles[key]?.length === 1 &&
+        this.groupedPendingFiles[key][0].originalFile?.name === key;
+
       // Determine the upload status based on failed, cancelled, paused, completed, or uploading states
       const status = this.rootStates.failed[key]
         ? 'failed'
@@ -127,6 +132,7 @@ class FileUploadService {
         size: this.rootSizes[key],
         uploadedSize,
         status,
+        isUnknownFormat,
       };
 
       return acc;
@@ -283,6 +289,13 @@ class FileUploadService {
       return { [key]: root[key] };
     });
 
+    // Reset existing uploads
+    for (const rootKey of rootKeys) {
+      if (rootKey in this.groupIds) {
+        this.resetStates([rootKey]);
+      }
+    }
+
     // tree promises
     const treePromises = rootTrees.map(tree => {
       return traverserTreeLevel(tree, context.parentId, true);
@@ -308,7 +321,7 @@ class FileUploadService {
   ): Promise<PendingFileType[]> {
     logger.debug('===== upload =====');
     logger.debug('uploadStatus: ', this.uploadStatus);
-    
+
     // reset the upload status when creating a new document
     if (fileList.length === 1 && fileList[0].root === fileList[0].file.name) {
       if (this.uploadStatus === UploadStateEnum.Paused) {
