@@ -297,6 +297,9 @@ class FileUploadService {
     for (const rootKey of rootKeys) {
       if (rootKey in this.groupIds) {
         this.resetStates([rootKey]);
+      } else {
+        // remove from completed states
+        delete this.rootStates.completed[rootKey];
       }
     }
 
@@ -523,6 +526,10 @@ class FileUploadService {
     this.rootSizes = {};
     this.groupIds = {};
 
+    this.notify();
+
+    // reset the states for next upload
+    this.resetStates(Object.keys(this.rootStates.completed));
     this.notify();
   }
 
