@@ -297,6 +297,9 @@ class FileUploadService {
     for (const rootKey of rootKeys) {
       if (rootKey in this.groupIds) {
         this.resetStates([rootKey]);
+      } else {
+        // remove from completed states
+        delete this.rootStates.completed[rootKey];
       }
     }
 
@@ -524,6 +527,10 @@ class FileUploadService {
     this.groupIds = {};
 
     this.notify();
+
+    // reset the states for next upload
+    this.resetStates(Object.keys(this.rootStates.completed));
+    this.notify();
   }
 
   public cancelRootUpload(id: string) {
@@ -609,62 +616,29 @@ class FileUploadService {
   }
 
   public pauseOrResume() {
-    // pause or resume the curent upload task
-    switch (this.uploadStatus) {
-      case UploadStateEnum.Progress:
-        this.uploadStatus = UploadStateEnum.Paused;
-        break;
-      case UploadStateEnum.Paused:
-        this.uploadStatus = UploadStateEnum.Progress;
-        break;
-      case UploadStateEnum.Cancelled:
-        throw new Error('Cannot toggle upload status: Upload is cancelled.');
-      default:
-        throw new Error(`Unexpected upload status: ${this.uploadStatus}`);
-    }
+    const isPausing = this.uploadStatus === UploadStateEnum.Progress;
+    this.uploadStatus = isPausing ? UploadStateEnum.Paused : UploadStateEnum.Progress;
 
-    // pause or resume the resumable tasks
-    const filesToProcess = this.pendingFiles;
-
-    if (!filesToProcess || filesToProcess.length === 0) {
-      console.error(`No files found for id`);
-      return;
-    }
-
-    for (const file of filesToProcess) {
-      if (file.status === 'success') continue;
-      this.pauseOrResumeFile(file);
-    }
-
-    // update the status of the roots
+    // Update root states
     const roots = Object.keys(this.groupedPendingFiles);
     for (const root of roots) {
-      // check if the root has completed skip it
-      if (this.rootStates.completed[root]) continue;
-      if (this.uploadStatus === UploadStateEnum.Paused) {
-        this.rootStates.paused[root] = true;
+      if (this.rootStates.completed[root]) continue; // Skip completed roots
+
+      if (isPausing) {
+        if (!this.rootStates.paused[root]) {
+          this.pauseOrResumeRoot(root, true);
+        }
       } else {
-        this.rootStates.paused[root] = false;
+        if (this.rootStates.paused[root]) {
+          this.pauseOrResumeRoot(root, true);
+        }
       }
     }
 
     this.notify();
   }
 
-  public pauseOrResumeRoot(id: string) {
-    const completedRoots = Object.keys(this.rootStates.completed);
-    const roots = Object.keys(this.rootSizes);
-    const isOnlyRootInProgress = roots.length - completedRoots.length === 1;
-
-    // Check if this is the only root in progress
-    if (!this.rootStates.completed[id] && isOnlyRootInProgress) {
-      this.uploadStatus =
-        this.uploadStatus === UploadStateEnum.Progress
-          ? UploadStateEnum.Paused
-          : UploadStateEnum.Progress;
-    }
-
-    // set the pause status for the root
+  public pauseOrResumeRoot(id: string, ignoreRootCheck?: boolean) {
     if (Object.keys(this.rootStates.paused).includes(id)) {
       this.rootStates.paused[id] = !this.rootStates.paused[id];
     } else {
@@ -675,7 +649,7 @@ class FileUploadService {
     const filesToProcess = this.groupedPendingFiles[id];
 
     if (!filesToProcess || filesToProcess.length === 0) {
-      console.error(`No files found for id: ${id}`);
+      logger.error(`No files found for id: ${id}`);
       return;
     }
 
@@ -687,6 +661,18 @@ class FileUploadService {
     }
 
     this.notify();
+
+    if (!ignoreRootCheck) {
+      // set the root upload status
+      const roots = Object.keys(this.groupedPendingFiles);
+      const isAllPaused = roots.every(root => this.rootStates.paused[root]);
+      if (isAllPaused) {
+        this.uploadStatus = UploadStateEnum.Paused;
+      } else {
+        this.uploadStatus = UploadStateEnum.Progress;
+      }
+      this.notify();
+    }
   }
 
   private getResumableInstance({
