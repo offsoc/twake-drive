@@ -54,6 +54,9 @@ export type AVStatus = AVStatusSafe | AVStatusUnsafe;
     // Needs to be globally unique (no `company_id`) because it's the only key that OnlyOffice
     // will return to us to identify the document being edited. Convenient for other plugins too.
     ["editing_session_key"],
+
+    // For trash folder enumeration. the is_in_trash above was not always picked by the planner
+    ["creator", "is_in_trash", "scope", "company_id"],
   ],
   primaryKey: [["company_id"], "id"],
   type: TYPE,
