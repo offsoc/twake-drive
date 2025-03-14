@@ -12,6 +12,7 @@
 - Rollup final script file to add dependencies after
 - Made performance test runnable
 - Drive items are now properly removed from the search index when deleted
+- Faster listing for trash
 
 # Twake Drive v1.0.6
 
