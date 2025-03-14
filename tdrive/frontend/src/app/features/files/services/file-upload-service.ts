@@ -123,6 +123,16 @@ class FileUploadService {
 
       if (status === 'completed') {
         this.rootStates.completed[key] = true;
+        // remaining roots
+        const roots = Object.keys(this.groupedPendingFiles);
+        const isAllPaused = roots.every(
+          root => this.rootStates.paused[root] || this.rootStates.completed[root],
+        );
+        if (isAllPaused) {
+          this.uploadStatus = UploadStateEnum.Paused;
+        } else {
+          this.uploadStatus = UploadStateEnum.Progress;
+        }
       }
 
       // Add to the accumulator object
@@ -513,7 +523,10 @@ class FileUploadService {
     for (const rootItem of Object.keys(rootItemIds)) {
       const rootItemId = rootItemIds[rootItem];
       // check if the root completed skip it
-      if (this.rootStates.completed[rootItem]) continue;
+      if (this.rootStates.completed[rootItem]) {
+        delete this.rootStates.completed[rootItem];
+        continue;
+      }
       this.deleteOneDriveItem({
         companyId: this.companyId,
         id: rootItemId,
@@ -526,10 +539,6 @@ class FileUploadService {
     this.rootSizes = {};
     this.groupIds = {};
 
-    this.notify();
-
-    // reset the states for next upload
-    this.resetStates(Object.keys(this.rootStates.completed));
     this.notify();
   }
 
