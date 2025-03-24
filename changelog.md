@@ -5,6 +5,7 @@
 - Big folder upload with new upload modal
 - Added root folder for all uploads, document creation, and cleanup after
 - Add testing identifier to new upload modal
+- Add delete user endpoint.
 
 ## Fixes and Improvements
 
@@ -13,6 +14,7 @@
 - Made performance test runnable
 - Drive items are now properly removed from the search index when deleted
 - Faster listing for trash
+- Fix file/folder upload picker.
 
 # Twake Drive v1.0.6
 
