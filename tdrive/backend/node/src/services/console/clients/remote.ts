@@ -199,7 +199,7 @@ export class ConsoleRemoteClient implements ConsoleServiceClient {
     if (!user) {
       throw CrudException.notFound(`User ${consoleUserId} doesn't exists`);
     }
-    await gr.services.companies.removeUserFromCompany({ id: company.id }, { id: user.id });
+    await gr.services.companies.removeUserFromCompany({ id: company.id }, user.id);
   }
 
   async removeUser(consoleUserId: string): Promise<void> {
@@ -326,6 +326,17 @@ export class ConsoleRemoteClient implements ConsoleServiceClient {
       session.revoked_at = new Date().getTime();
       await sessionRepository.save(session);
     }
+  }
+
+  async userWasDeletedForceLogout(userId: string) {
+    const sessionRepository = gr.services.console.getSessionRepo();
+    if (!sessionRepository) return;
+    const sessions = (await sessionRepository.find({ sub: userId })).getEntities();
+    for (const session of sessions)
+      if (!session.revoked_at) {
+        session.revoked_at = new Date().getTime();
+        await sessionRepository.save(session);
+      }
   }
 
   async verifyJwtSid(sid: string): Promise<void> {

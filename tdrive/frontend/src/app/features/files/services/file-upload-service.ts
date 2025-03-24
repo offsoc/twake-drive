@@ -105,8 +105,8 @@ class FileUploadService {
         this.rootStates.failed[key] = true;
       }
 
-      // Check if the root is a file with unknow format
-      const isUnknownFormat =
+      // Check if the root is a file regardless of the file format
+      const isFileRoot =
         this.groupedPendingFiles[key]?.length === 1 &&
         this.groupedPendingFiles[key][0].originalFile?.name === key;
 
@@ -123,6 +123,16 @@ class FileUploadService {
 
       if (status === 'completed') {
         this.rootStates.completed[key] = true;
+        // remaining roots
+        const roots = Object.keys(this.groupedPendingFiles);
+        const isAllPaused = roots.every(
+          root => this.rootStates.paused[root] || this.rootStates.completed[root],
+        );
+        if (isAllPaused) {
+          this.uploadStatus = UploadStateEnum.Paused;
+        } else {
+          this.uploadStatus = UploadStateEnum.Progress;
+        }
       }
 
       // Add to the accumulator object
@@ -132,7 +142,7 @@ class FileUploadService {
         size: this.rootSizes[key],
         uploadedSize,
         status,
-        isUnknownFormat,
+        isFileRoot,
       };
 
       return acc;
@@ -243,10 +253,9 @@ class FileUploadService {
         },
         callback: async (filePayload, context) => {
           const root = filePayload.root;
-          const isUnknownFormat =
+          const isFileRoot =
             this.groupedPendingFiles[root]?.length === 1 &&
             this.groupedPendingFiles[root][0].originalFile?.name === root;
-          const isFileRoot = isUnknownFormat || filePayload.root.includes('.');
 
           const file = filePayload.file;
           if (file) {
@@ -513,7 +522,10 @@ class FileUploadService {
     for (const rootItem of Object.keys(rootItemIds)) {
       const rootItemId = rootItemIds[rootItem];
       // check if the root completed skip it
-      if (this.rootStates.completed[rootItem]) continue;
+      if (this.rootStates.completed[rootItem]) {
+        delete this.rootStates.completed[rootItem];
+        continue;
+      }
       this.deleteOneDriveItem({
         companyId: this.companyId,
         id: rootItemId,
@@ -526,10 +538,6 @@ class FileUploadService {
     this.rootSizes = {};
     this.groupIds = {};
 
-    this.notify();
-
-    // reset the states for next upload
-    this.resetStates(Object.keys(this.rootStates.completed));
     this.notify();
   }
 
