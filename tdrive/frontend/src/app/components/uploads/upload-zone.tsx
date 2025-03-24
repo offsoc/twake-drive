@@ -63,7 +63,7 @@ export default class UploadZone extends React.Component<PropsType, StateType> {
         sharedFileInput = this.file_input;
       }
     } else {
-      this.file_input = sharedFileInput;
+      this.file_input = this.props.directory ? sharedFolderInput : sharedFileInput;
     }
   }
 
