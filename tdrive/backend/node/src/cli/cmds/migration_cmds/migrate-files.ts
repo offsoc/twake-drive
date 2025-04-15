@@ -3,30 +3,9 @@ import runWithLoggerLevel from "../../utils/run-with-logger-level";
 import globalResolver from "../../../services/global-resolver";
 import User from "../../../services/user/entities/user";
 import yargs from "yargs";
-import amqp from "amqplib";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
-
-const RABBITMQ_URL = "amqp://localhost";
-const QUEUE_NAME = "demo_queue";
-
-async function publishMessage(message: { [key: string]: any }) {
-  try {
-    const connection = await amqp.connect(RABBITMQ_URL);
-    const channel = await connection.createChannel();
-
-    await channel.assertQueue(QUEUE_NAME, { durable: true });
-    channel.sendToQueue(QUEUE_NAME, Buffer.from(JSON.stringify(message)), { persistent: true });
-
-    console.log(`✅ (1)Message sent: ${JSON.stringify(message)}`);
-
-    setTimeout(() => {
-      connection.close();
-    }, 500);
-  } catch (error) {
-    console.error("❌ Error in publisher:", error);
-  }
-}
+import { publishMessage } from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -55,16 +34,8 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
 
         // STEP2: CREATE THE FILE TREE FOR EACH USER AND APPLY THE ACCESS/SHARED PERMISSIONS
         for (const user of allUsers) {
-          const userCompany = (
-            await globalResolver.services.users.getUserCompanies(
-              {
-                id: user.id,
-              },
-              {
-                user,
-              },
-            )
-          )[0];
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const userCompany = user.cache.companies[0];
           const userFiles = await documentsRepo.find({ creator: user.id });
           const userId = user.email_canonical.split("@")[0];
           console.log(`User ${user.id} has ${userFiles.getEntities().length} files`);
@@ -72,11 +43,11 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           for (const userFile of userFiles.getEntities()) {
             const filePathItems = await getPath(userFile.id, documentsRepo, true, {
               company: {
-                id: userCompany.id,
+                id: userCompany,
               },
             } as any);
             const filePath = filePathItems
-              .slice(0, -1)
+              .slice(1, -1)
               .map(p => p.name)
               .join("/");
             const fileObject = {
@@ -88,8 +59,9 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
               added: userFile.added,
               last_modified: userFile.last_modified,
               size: userFile.size,
-              path: filePath,
+              path: filePath !== "My Drive" ? filePath : "",
             };
+
             userFilesObjects.push(fileObject);
           }
           publishMessage({

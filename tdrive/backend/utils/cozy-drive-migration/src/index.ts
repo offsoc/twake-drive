@@ -70,6 +70,13 @@ async function startListener() {
             for (const file of actionPayload.files) {
               if (!file.is_directory) {
                 try {
+                  let filePath = 'io.cozy.files.root-dir';
+                  if (file.path !== '') {
+                    const sanitizedPath = file.path.replace(/^\//, '');
+                    console.log('Path without My Drive:', sanitizedPath);
+                    filePath = (await client.collection('io.cozy.files').createDirectoryByPath(file.path)).data.id;
+                  }
+                  
                   const fileDownloadUrl = `${BACKEND_URL_PROXY}/internal/services/documents/v1/companies/${COMPANY_ID}/item/${file._id}/download`;
                   const downloadStream = await axios.get(fileDownloadUrl, {
                     headers: {
@@ -82,20 +89,15 @@ async function startListener() {
                   const fileUploadPayload = {
                     _type: 'io.cozy.files',
                     type: 'file',
-                    dirId: 'io.cozy.files.root-dir',
+                    dirId: filePath,
                     name: file.name,
                     data: fileBuffer,
                   }
-                  const resp = await client.save(fileUploadPayload)
-                  if (resp === undefined) {
-                    // eslint-disable-next-line no-console
-                    console.log('✅ File created successfully:', file.name)
-                    await migrateFile(COMPANY_ID, file._id, authToken)
-                    console.log('✅ File migrated successfully:', file.name)
-                  }
-                  else {
-                    console.error('Error creating file:', resp)
-                  }
+                  await client.save(fileUploadPayload)
+                  // eslint-disable-next-line no-console
+                  console.log('✅ File created successfully:', file.name)
+                  await migrateFile(COMPANY_ID, file._id, authToken)
+                  console.log('✅ File migrated successfully:', file.name)
                 // eslint-disable-next-line unused-imports/no-unused-vars
                 } catch (error) {
                   console.log("ERROR CREATING THE FILE:: ", file.name)

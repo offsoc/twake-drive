@@ -3,28 +3,7 @@ import runWithLoggerLevel from "../../utils/run-with-logger-level";
 import globalResolver from "../../../services/global-resolver";
 import User from "../../../services/user/entities/user";
 import yargs from "yargs";
-import amqp from "amqplib";
-
-const RABBITMQ_URL = "amqp://localhost";
-const QUEUE_NAME = "demo_queue";
-
-async function publishMessage(message: { [key: string]: any }) {
-  try {
-    const connection = await amqp.connect(RABBITMQ_URL);
-    const channel = await connection.createChannel();
-
-    await channel.assertQueue(QUEUE_NAME, { durable: true });
-    channel.sendToQueue(QUEUE_NAME, Buffer.from(JSON.stringify(message)), { persistent: true });
-
-    console.log(`✅ (1)Message sent: ${JSON.stringify(message)}`);
-
-    setTimeout(() => {
-      connection.close();
-    }, 500);
-  } catch (error) {
-    console.error("❌ Error in publisher:", error);
-  }
-}
+import { publishMessage } from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-users",
@@ -64,6 +43,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
             email: user.email_canonical,
             name: `${user.first_name} ${user.last_name}`,
           };
+
           publishMessage({
             action: "user",
             data: userObject,
