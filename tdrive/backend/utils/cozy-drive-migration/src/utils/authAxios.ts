@@ -53,7 +53,7 @@ authAxios.interceptors.request.use(
             authToken = await getAuthToken()
             console.log('[authAxios] ✅ Got initial token')
         }
-
+        console.log('[authAxios] Adding auth token to request headers:', authToken)
         config.headers = config.headers || {}
         config.headers['Authorization'] = `Bearer ${authToken}`
         return config

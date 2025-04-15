@@ -38,7 +38,9 @@
     "amqplib": "^0.10.7",
     "axios": "^1.8.4",
     "cozy-client": "catalog:",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:cli",

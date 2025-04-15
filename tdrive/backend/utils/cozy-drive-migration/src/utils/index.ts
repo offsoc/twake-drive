@@ -42,3 +42,11 @@ export async function migrateFile(companyID: string, fileID: string): Promise<nu
   )
   return resp.status
 }
+
+export async function downloadFile(companyID: string, fileID: string): Promise<Buffer<ArrayBuffer>> {
+  const fileDownloadUrl = `${BACKEND_URL_PROXY}/internal/services/documents/v1/companies/${companyID}/item/${fileID}/download`;
+  const resp = await authAxios.get(fileDownloadUrl, {
+    responseType: 'arraybuffer',
+  });
+  return Buffer.from(resp.data, 'binary');
+}

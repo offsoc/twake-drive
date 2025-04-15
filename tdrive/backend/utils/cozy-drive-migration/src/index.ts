@@ -2,13 +2,12 @@ import 'dotenv/config'
 import type { Channel, Connection, ConsumeMessage } from 'amqplib'
 import amqp from 'amqplib'
 import CozyClient from 'cozy-client'
-import { executeCommand, migrateFile, migrateUser } from './utils'
-import authAxios from './utils/authAxios'
+import { downloadFile, executeCommand, migrateFile, migrateUser } from './utils'
+import logger from './utils/logger'
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL
 const QUEUE_NAME = process.env.QUEUE_NAME || ''
 const BACKEND_URL = process.env.BACKEND_URL
-const BACKEND_URL_PROXY = process.env.BACKEND_URL_PROXY || BACKEND_URL
 const COZY_STACK = process.env.COZY_STACK
 
 // eslint-disable-next-line ts/explicit-function-return-type
@@ -24,15 +23,14 @@ async function startListener() {
     await channel.assertQueue(QUEUE_NAME, { durable: true })
     await channel.prefetch(1)
 
-    // eslint-disable-next-line no-console
-    console.log('Waiting for data...')
+    logger.info('Waiting for data...')
 
     channel.consume(QUEUE_NAME, async (msg: ConsumeMessage | null) => {
       if (msg !== null) {
         try {
           const message = JSON.parse(msg.content.toString()) as any
-          // eslint-disable-next-line no-console
-          console.log(`Received action: ${message.action}`)
+
+          logger.info(`Received action: ${message.action}`)
 
           if (message.action === 'user') {
             const user = message.data
@@ -41,20 +39,19 @@ async function startListener() {
 
             try {
               const createUserResult = await executeCommand(command)
-              // eslint-disable-next-line no-console
-              console.log('Command executed successfully:', createUserResult)
+
+              logger.info('Command executed successfully:', createUserResult)
 
               const migrateUserResult = await migrateUser(user._id)
               if (migrateUserResult === 200) {
-                // eslint-disable-next-line no-console
-                console.log('User migration completed successfully.')
+                logger.info('User migration completed successfully.')
               }
               else {
-                console.error('Error during user migration:', migrateUserResult)
+                logger.error('Error during user migration:', migrateUserResult)
               }
             }
             catch (error) {
-              console.error('Error executing command:', error)
+              logger.error('Error executing command:', error)
             }
           }
           else if (message.action === 'file') {
@@ -73,15 +70,7 @@ async function startListener() {
                   const sanitizedPath = file.path.replace(/^\//, '');
                   filePath = (await client.collection('io.cozy.files').createDirectoryByPath(sanitizedPath)).data.id;
                 }
-
-                const fileDownloadUrl = `${BACKEND_URL_PROXY}/internal/services/documents/v1/companies/${file.company_id}/item/${file._id}/download`;
-                const downloadStream = await authAxios.get(fileDownloadUrl, {
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                  responseType: 'arraybuffer',
-                });
-                const fileBuffer = Buffer.from(downloadStream.data, 'binary');
+                const fileBuffer = await downloadFile(file.company_id, file._id);
                 const fileUploadPayload = {
                   _type: 'io.cozy.files',
                   type: 'file',
@@ -90,39 +79,35 @@ async function startListener() {
                   data: fileBuffer,
                 }
                 await client.save(fileUploadPayload)
-                // eslint-disable-next-line no-console
-                console.log('✅ File created successfully:', file.name)
+                logger.info(`✅ File created successfully: ${file.name}`)
                 await migrateFile(file.company_id, file._id)
-                console.log('✅ File migrated successfully:', file.name)
-                // eslint-disable-next-line unused-imports/no-unused-vars
+                logger.info(`✅ File migrated successfully: ${file.name}`)
               } catch (error) {
-                console.log("ERROR CREATING THE FILE:: ", file.name)
-                console.log("ERROR:: ", error)
+                logger.error(`ERROR CREATING THE FILE:: ${file.name}`)
+                logger.error(`ERROR::  ${JSON.stringify(error)}`)
               }
 
             }
-            // eslint-disable-next-line no-console
-            console.log('Received file action with token', userToken)
           }
           else {
             // eslint-disable-next-line no-console
-            console.log('Unknown action received:', message.action)
+            logger.info('Unknown action received:', message.action)
           }
         }
         catch (error) {
-          console.error('Error parsing message or processing.')
-          console.log('Error:', error)
+          logger.error('Error parsing message or processing.')
+          logger.error('Error:', error)
         }
         finally {
           channel.ack(msg)
           // eslint-disable-next-line no-console
-          console.log(`Acknowledged message.`)
+          logger.info(`Acknowledged message.`)
         }
       }
     })
   }
   catch (error) {
-    console.error('Error in listener:', error)
+    logger.error('Error in listener:', error)
   }
 }
 
