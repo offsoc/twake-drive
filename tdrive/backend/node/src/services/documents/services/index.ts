@@ -731,6 +731,7 @@ export class DocumentsService {
       item.migrated = true;
       item.migration_date = Date.now();
       await this.repository.save(item);
+      return item;
     } catch (err) {
       this.logger.error({ err }, "Failed to update drive item");
       throw new CrudException("Failed to update item", 500);

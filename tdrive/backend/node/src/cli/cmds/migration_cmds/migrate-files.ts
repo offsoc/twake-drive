@@ -23,7 +23,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
     console.log("DRY RUN: ", dryRun);
 
     await runWithPlatform("Migrate files", async () => {
-      return await runWithLoggerLevel("info", async () => {
+      return await runWithLoggerLevel("fatal", async () => {
         const usersRepo = await globalResolver.database.getRepository<User>("user", User);
         const documentsRepo = await globalResolver.database.getRepository<DriveFile>(
           TYPE,
@@ -36,16 +36,23 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
         for (const user of allUsers) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const userCompany = user.cache.companies[0];
-          const userFiles = await documentsRepo.find({ creator: user.id });
+          const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
           console.log(`User ${user.id} has ${userFiles.getEntities().length} files`);
           const userFilesObjects = [];
           for (const userFile of userFiles.getEntities()) {
+            if (userFile.migrated) {
+              // skip already migrated files
+              continue;
+            }
+            // Get the file path items
             const filePathItems = await getPath(userFile.id, documentsRepo, true, {
               company: {
                 id: userCompany,
               },
             } as any);
+            // Construct the file path
+            // The first item is the root folder, we want to skip it (My Drive)
             const filePath = filePathItems
               .slice(1, -1)
               .map(p => p.name)
@@ -60,6 +67,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
               last_modified: userFile.last_modified,
               size: userFile.size,
               path: filePath !== "My Drive" ? filePath : "",
+              company_id: userCompany,
             };
 
             userFilesObjects.push(fileObject);
