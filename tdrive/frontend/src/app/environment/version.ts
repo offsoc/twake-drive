@@ -1,5 +1,5 @@
 export default {
-  version: /* @VERSION */ '1.0.7-rc8',
-  version_detail: /* @VERSION_DETAIL */ '1.0.7-rc8',
+  version: /* @VERSION */ '1.0.7-rc9',
+  version_detail: /* @VERSION_DETAIL */ '1.0.7-rc9',
   version_name: /* @VERSION_NAME */ 'Ghost-Dog',
 };
