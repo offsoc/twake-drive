@@ -1,31 +1,23 @@
-import amqp from "amqplib";
-import axios from "axios"; // added axios for API calls
+/* eslint-disable prettier/prettier */
+import axios from "axios";
+import config from "config";
+import { Readable } from "stream";
 
-const RABBITMQ_URL = "amqp://localhost";
-const QUEUE_NAME = "demo_queue";
+export const COZY_DOMAIN = config.get<string>("migration.cozyDomain");
+const COZY_MANAGER_URL = config.get<string>("migration.cozyManagerUrl");
+const COZY_MANAGER_TOKEN = config.get<string>("migration.cozyManagerToken");
+const POLL_INTERVAL_MS = config.get<number>("migration.pollInterval");
+const MAX_RETRIES = config.get<number>("migration.maxRetries");
 
-export async function publishMessage(message: { [key: string]: any }) {
-  try {
-    const connection = await amqp.connect(RABBITMQ_URL);
-    const channel = await connection.createChannel();
-
-    await channel.assertQueue(QUEUE_NAME, { durable: true });
-    channel.sendToQueue(QUEUE_NAME, Buffer.from(JSON.stringify(message)), { persistent: true });
-
-    console.log(`✅ (1)Message sent: ${JSON.stringify(message)}`);
-
-    setTimeout(() => {
-      connection.close();
-    }, 500);
-  } catch (error) {
-    console.error("❌ Error in publisher:", error);
-  }
+export function streamToBuffer(stream: Readable): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    stream.on("data", chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", err => reject(err));
+  });
 }
 
-const COZY_MANAGER_URL = "https://manager-int.cozycloud.cc/api/public";
-const COZY_MANAGER_TOKEN = "AwnV6AH1HaTNxvpQveqTDkgRrucJpydg";
-const POLL_INTERVAL_MS = 5000; // 5 seconds
-const MAX_RETRIES = 3;
 
 export async function createCozyInstance(user: {
   id: string;
@@ -42,7 +34,7 @@ export async function createCozyInstance(user: {
       {
         offer: "twake",
         slug: user.id,
-        domain: "stg.lin-saas.com",
+        domain: COZY_DOMAIN,
         email: user.email,
         public_name: user.name,
         locale: "fr",
@@ -112,7 +104,7 @@ export async function createCozyInstance(user: {
 }
 
 export async function getDriveToken(slugDomain: string): Promise<{ token: string }> {
-  const url = `${COZY_MANAGER_URL}/${slugDomain}/drive_token`;
+  const url = `${COZY_MANAGER_URL}/instances/${slugDomain}/drive_token`;
 
   try {
     const response = await axios.post(url, null, {
@@ -126,7 +118,7 @@ export async function getDriveToken(slugDomain: string): Promise<{ token: string
   } catch (error: any) {
     console.error(
       `Failed to get drive token for ${slugDomain}`,
-      error.response?.data || error.message,
+      error.response?.data || error.message, url
     );
     throw new Error(`Could not retrieve drive token for ${slugDomain}`);
   }

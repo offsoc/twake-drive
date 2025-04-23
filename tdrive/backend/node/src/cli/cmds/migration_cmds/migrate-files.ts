@@ -6,7 +6,7 @@ import yargs from "yargs";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
 import CozyClient from "cozy-client";
-import { getDriveToken } from "./utils";
+import { COZY_DOMAIN, streamToBuffer, getDriveToken } from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -18,10 +18,23 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
       description: "Simulate the migration and returns stats for the db.",
       default: true,
     },
+    emails: {
+      type: "string",
+      alias: "e",
+      description: "Comma-separated list of user emails to migrate files for specific users",
+    },
   },
   handler: async argv => {
     const dryRun = argv.dryRun as boolean;
     console.log("DRY RUN: ", dryRun);
+    const emailsArg = argv.emails as string | undefined;
+    const specifiedEmails = emailsArg
+      ? emailsArg.split(",").map(email => email.trim().toLowerCase())
+      : null;
+
+    if (specifiedEmails) {
+      console.log("Migrating only specified emails:", specifiedEmails.join(", "));
+    }
 
     await runWithPlatform("Migrate files", async () => {
       return await runWithLoggerLevel("fatal", async () => {
@@ -33,7 +46,14 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
 
         const allUsers = await (await usersRepo.find({})).getEntities();
 
-        for (const user of allUsers) {
+        let usersToMigrate = allUsers;
+        if (specifiedEmails) {
+          usersToMigrate = allUsers.filter(user =>
+            specifiedEmails.includes(user.email_canonical.toLowerCase()),
+          );
+        }
+
+        for (const user of usersToMigrate) {
           const userCompany = user.cache.companies[0];
           const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
@@ -73,11 +93,11 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
 
             if (!dryRun) {
               try {
-                const cozyUrl = `${userId}.stg.lin-saas.com`;
+                const cozyUrl = `${userId}.${COZY_DOMAIN}`;
                 const userToken = await getDriveToken(cozyUrl);
                 const client = new CozyClient({
                   uri: `https://${cozyUrl}`,
-                  token: userToken,
+                  token: userToken.token,
                 });
 
                 let fileDirPath = "io.cozy.files.root-dir";
@@ -87,7 +107,6 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                     await client.collection("io.cozy.files").createDirectoryByPath(sanitizedPath)
                   ).data.id;
                 }
-
                 // 2. Download file from backend
                 const archiveOrFile = await globalResolver.services.documents.documents.download(
                   userFile.id,
@@ -104,7 +123,8 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   continue;
                 }
 
-                const { file: fileBuffer } = archiveOrFile.file;
+                const { file: fileStream } = archiveOrFile.file;
+                const fileBuffer = await streamToBuffer(fileStream);
 
                 if (!fileBuffer) {
                   console.error(`File ${userFile.id} has no buffer content. Skipping.`);

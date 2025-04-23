@@ -16,7 +16,7 @@ COPY backend/node/package*.json ./
 # Test Stage
 FROM node-base AS test
 
-RUN npm install
+RUN npm install --legacy-peer-deps
 COPY backend/node/ .
 
 # Add frontend Stage

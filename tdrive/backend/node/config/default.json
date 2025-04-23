@@ -138,6 +138,13 @@
     "timeout": 2000,
     "maxFileSize": 26214400
   },
+  "migration": {
+    "cozyDomain": "stg.lin-saas.com",
+    "cozyManagerUrl": "https://manager-int.cozycloud.cc/api/public",
+    "cozyManagerToken": "COZY_TOKEN_HERE",
+    "pollInterval": 5000,
+    "maxRetries": 3
+  },
   "applications": {
     "grid": [
       {
