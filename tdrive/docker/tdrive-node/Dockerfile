@@ -40,7 +40,7 @@ FROM installed-libs AS development
 ENV NODE_ENV=development
 RUN npm install -g pino-pretty && \
     npm install -g tsc-watch && \
-    npm ci
+    npm i --legacy-peer-deps
 CMD ["npm", "run", "dev:debug"]
 
 # Production Stage
