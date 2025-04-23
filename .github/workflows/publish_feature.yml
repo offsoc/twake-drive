@@ -55,14 +55,11 @@ jobs:
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Build and push
-        uses: docker/bake-action@v4
+        uses: docker/bake-action@v6
         with:
           files: |
             ./docker-bake.hcl
-            ${{ steps.meta.outputs.bake-file-annotations }}
-            ${{ steps.meta.outputs.bake-file }}
+            cwd://${{ steps.meta.outputs.bake-file-annotations }}
+            cwd://${{ steps.meta.outputs.bake-file }}
           push: true
           targets: ${{ matrix.targets }}
-          set: |
-            _common.cache-to=type=gha,mode=max
-            _common.cache-from=type=gha

@@ -15,6 +15,7 @@ export const userObjectSchema = {
     last_name: { type: "string" },
     created_at: { type: "number" },
     deleted: { type: "boolean" },
+    marked_to_delete: { type: "boolean" },
     delete_process_started_epoch: { type: "number" },
 
     status: { type: "string" },
@@ -97,6 +98,7 @@ export const companyObjectSchema = {
             [CompanyFeaturesEnum.COMPANY_USER_QUOTA]: { type: "boolean" },
             [CompanyFeaturesEnum.COMPANY_MANAGE_ACCESS]: { type: "boolean" },
             [CompanyFeaturesEnum.COMPANY_AV_ENABLED]: { type: "boolean" },
+            [CompanyFeaturesEnum.COMPANY_AV_STATUS_ALLOWED]: {} as { [key: string]: string[] },
             guests: { type: "number" }, // to rename or delete
             members: { type: "number" }, //  to rename or delete
             storage: { type: "number" }, //  to rename or delete
