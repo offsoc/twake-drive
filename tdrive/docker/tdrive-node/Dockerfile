@@ -32,7 +32,7 @@ ENV NODE_ENV=production
 RUN npm run build
 RUN rm -rf node_modules
 #Install prod dependancies after build
-RUN npm ci --legacy-peer-deps
+RUN npm i --legacy-peer-deps
 
 # Development Stage
 FROM installed-libs AS development
