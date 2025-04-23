@@ -5,7 +5,8 @@ import User from "../../../services/user/entities/user";
 import yargs from "yargs";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
-import { publishMessage } from "./utils";
+import CozyClient from "cozy-client";
+import { getDriveToken } from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -15,7 +16,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
       type: "boolean",
       alias: "d",
       description: "Simulate the migration and returns stats for the db.",
-      default: true, // Enabled dry-run mode by default
+      default: true,
     },
   },
   handler: async argv => {
@@ -29,34 +30,32 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           TYPE,
           DriveFile,
         );
-        // Fetch users
+
         const allUsers = await (await usersRepo.find({})).getEntities();
 
-        // STEP2: CREATE THE FILE TREE FOR EACH USER AND APPLY THE ACCESS/SHARED PERMISSIONS
         for (const user of allUsers) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const userCompany = user.cache.companies[0];
           const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
+
           console.log(`User ${user.id} has ${userFiles.getEntities().length} files`);
+
           const userFilesObjects = [];
+
           for (const userFile of userFiles.getEntities()) {
             if (userFile.migrated) {
-              // skip already migrated files
               continue;
             }
-            // Get the file path items
+
             const filePathItems = await getPath(userFile.id, documentsRepo, true, {
-              company: {
-                id: userCompany,
-              },
+              company: { id: userCompany },
             } as any);
-            // Construct the file path
-            // The first item is the root folder, we want to skip it (My Drive)
+
             const filePath = filePathItems
               .slice(1, -1)
               .map(p => p.name)
               .join("/");
+
             const fileObject = {
               owner: userId,
               _id: userFile.id,
@@ -71,14 +70,72 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
             };
 
             userFilesObjects.push(fileObject);
+
+            if (!dryRun) {
+              try {
+                const cozyUrl = `${userId}.stg.lin-saas.com`;
+                const userToken = await getDriveToken(cozyUrl);
+                const client = new CozyClient({
+                  uri: `https://${cozyUrl}`,
+                  token: userToken,
+                });
+
+                let fileDirPath = "io.cozy.files.root-dir";
+                if (fileObject.path !== "") {
+                  const sanitizedPath = fileObject.path.replace(/^\//, "");
+                  fileDirPath = (
+                    await client.collection("io.cozy.files").createDirectoryByPath(sanitizedPath)
+                  ).data.id;
+                }
+
+                // 2. Download file from backend
+                const archiveOrFile = await globalResolver.services.documents.documents.download(
+                  userFile.id,
+                  userFile.last_version_cache.id,
+                  null, // No archive callback needed
+                  {
+                    company: { id: userCompany },
+                    user: { id: user.id },
+                  } as any,
+                );
+
+                if (!archiveOrFile.file) {
+                  console.error(`File ${userFile.id} was returned as archive. Skipping.`);
+                  continue;
+                }
+
+                const { file: fileBuffer } = archiveOrFile.file;
+
+                if (!fileBuffer) {
+                  console.error(`File ${userFile.id} has no buffer content. Skipping.`);
+                  continue;
+                }
+                const fileUploadPayload = {
+                  _type: "io.cozy.files",
+                  type: "file",
+                  dirId: fileDirPath,
+                  name: fileObject.name,
+                  data: fileBuffer,
+                };
+
+                await client.save(fileUploadPayload);
+
+                console.log(`✅ File created successfully: ${fileObject.name}`);
+
+                // 3. Migrate file
+                userFile.migrated = true;
+                userFile.migration_date = Date.now();
+                await documentsRepo.save(userFile);
+
+                console.log(`✅ File migrated successfully: ${fileObject.name}`);
+              } catch (error) {
+                console.error(`❌ ERROR CREATING THE FILE: ${fileObject.name}`);
+                console.error(`❌ ERROR: ${JSON.stringify(error)}`);
+              }
+            } else {
+              console.log(`[DRY-RUN] Would create Cozy instance for user ${user.email_canonical}`);
+            }
           }
-          publishMessage({
-            action: "file",
-            data: {
-              userId: userId,
-              files: userFilesObjects,
-            },
-          });
         }
       });
     });
