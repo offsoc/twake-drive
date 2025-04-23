@@ -25,7 +25,7 @@ FROM node-base AS installed-libs
 COPY backend/node/ .
 #Install dev dependancies for build
 ENV NODE_ENV=development
-RUN npm ci
+RUN npm i --legacy-peer-deps
 
 #Build in production mode
 ENV NODE_ENV=production

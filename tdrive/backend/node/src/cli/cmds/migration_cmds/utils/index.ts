@@ -18,7 +18,6 @@ export function streamToBuffer(stream: Readable): Promise<Buffer> {
   });
 }
 
-
 export async function createCozyInstance(user: {
   id: string;
   email: string;
@@ -118,7 +117,8 @@ export async function getDriveToken(slugDomain: string): Promise<{ token: string
   } catch (error: any) {
     console.error(
       `Failed to get drive token for ${slugDomain}`,
-      error.response?.data || error.message, url
+      error.response?.data || error.message,
+      url,
     );
     throw new Error(`Could not retrieve drive token for ${slugDomain}`);
   }
