@@ -8,6 +8,7 @@ const COZY_MANAGER_URL = config.get<string>("migration.cozyManagerUrl");
 const COZY_MANAGER_TOKEN = config.get<string>("migration.cozyManagerToken");
 const POLL_INTERVAL_MS = config.get<number>("migration.pollInterval");
 const MAX_RETRIES = config.get<number>("migration.maxRetries");
+export const DEFAULT_COMPANY = config.get<string>("drive.defaultCompany");
 
 export function streamToBuffer(stream: Readable): Promise<Buffer> {
   return new Promise((resolve, reject) => {

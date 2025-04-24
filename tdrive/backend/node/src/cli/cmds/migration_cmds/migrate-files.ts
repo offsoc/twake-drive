@@ -6,7 +6,7 @@ import yargs from "yargs";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
 import CozyClient from "cozy-client";
-import { COZY_DOMAIN, streamToBuffer, getDriveToken } from "./utils";
+import { COZY_DOMAIN, DEFAULT_COMPANY, streamToBuffer, getDriveToken } from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -54,7 +54,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
         }
 
         for (const user of usersToMigrate) {
-          const userCompany = user.cache.companies[0];
+          const userCompany = DEFAULT_COMPANY;
           const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
 
