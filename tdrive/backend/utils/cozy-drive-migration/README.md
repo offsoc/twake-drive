@@ -1,1 +1,0 @@
-# A Cozy client for migrating users data from Twake Drive
