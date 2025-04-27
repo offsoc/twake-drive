@@ -6,7 +6,30 @@ import yargs from "yargs";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
 import CozyClient from "cozy-client";
-import { COZY_DOMAIN, DEFAULT_COMPANY, streamToBuffer, getDriveToken } from "./utils";
+import { COZY_DOMAIN, DEFAULT_COMPANY, getDriveToken } from "./utils";
+
+function buildUploadUrl(baseUrl, params) {
+  const searchParams = new URLSearchParams(params);
+  return `${baseUrl}?${searchParams.toString()}`;
+}
+
+function nodeReadableToWebReadable(readable, onProgress?: (chunkSize: number) => void) {
+  const reader = readable[Symbol.asyncIterator]();
+  return new ReadableStream({
+    async pull(controller) {
+      const { value, done } = await reader.next();
+      if (done) {
+        controller.close();
+      } else {
+        if (onProgress) onProgress(value.length); // report progress
+        controller.enqueue(value);
+      }
+    },
+    cancel() {
+      reader.return?.();
+    },
+  });
+}
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -54,7 +77,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
         }
 
         for (const user of usersToMigrate) {
-          const userCompany = DEFAULT_COMPANY;
+          const userCompany = user.cache.companies[0] || DEFAULT_COMPANY;
           const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
 
@@ -66,7 +89,6 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
             if (userFile.migrated) {
               continue;
             }
-
             const filePathItems = await getPath(userFile.id, documentsRepo, true, {
               company: { id: userCompany },
             } as any);
@@ -122,35 +144,47 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   console.error(`File ${userFile.id} was returned as archive. Skipping.`);
                   continue;
                 }
-
+                let uploadedBytes = 0;
+                const totalSize = fileObject.size || 0;
                 const { file: fileStream } = archiveOrFile.file;
-                const fileBuffer = await streamToBuffer(fileStream);
-
-                if (!fileBuffer) {
-                  console.error(`File ${userFile.id} has no buffer content. Skipping.`);
+                const fileReadable = nodeReadableToWebReadable(fileStream, chunkSize => {
+                  uploadedBytes += chunkSize;
+                  const percentage =
+                    totalSize > 0 ? ((uploadedBytes / totalSize) * 100).toFixed(2) : "0";
+                  process.stdout.write(`\rUploading ${fileObject.name}... ${percentage}%`);
+                });
+                const baseUrl = `https://${userId}.stg.lin-saas.com/files/${fileDirPath}`;
+                const params = {
+                  Name: fileObject.name,
+                  Type: "file",
+                  Executable: false,
+                  Encrypted: false,
+                  Size: "",
+                };
+                const uploadUrl = buildUploadUrl(baseUrl, params);
+                const resp = await fetch(uploadUrl, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${userToken.token}`,
+                    "Content-Type": "application/octet-stream",
+                  },
+                  duplex: "half",
+                  body: fileReadable,
+                } as RequestInit);
+                if (!resp.ok) {
+                  console.error(`❌ ERROR UPLOADING THE FILE: ${fileObject.name}`);
+                  console.error(`❌ ERROR: ${JSON.stringify(resp)}  ${resp}`);
                   continue;
                 }
-                const fileUploadPayload = {
-                  _type: "io.cozy.files",
-                  type: "file",
-                  dirId: fileDirPath,
-                  name: fileObject.name,
-                  data: fileBuffer,
-                };
-
-                await client.save(fileUploadPayload);
-
-                console.log(`✅ File created successfully: ${fileObject.name}`);
-
                 // 3. Migrate file
                 userFile.migrated = true;
                 userFile.migration_date = Date.now();
                 await documentsRepo.save(userFile);
 
-                console.log(`✅ File migrated successfully: ${fileObject.name}`);
+                console.log(`\n✅ File migrated successfully: ${fileObject.name}`);
               } catch (error) {
                 console.error(`❌ ERROR CREATING THE FILE: ${fileObject.name}`);
-                console.error(`❌ ERROR: ${JSON.stringify(error)}`);
+                console.error(`❌ ERROR: ${JSON.stringify(error)}  ${error}`);
               }
             } else {
               console.log(`[DRY-RUN] Would create Cozy instance for user ${user.email_canonical}`);
