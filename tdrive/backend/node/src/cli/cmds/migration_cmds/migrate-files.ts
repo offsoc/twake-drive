@@ -77,7 +77,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
         }
 
         for (const user of usersToMigrate) {
-          const userCompany = user.cache.companies[0] || DEFAULT_COMPANY;
+          const userCompany = DEFAULT_COMPANY;
           const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
 
