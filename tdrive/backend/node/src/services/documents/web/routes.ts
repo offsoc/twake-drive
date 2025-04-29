@@ -40,13 +40,6 @@ const routes: FastifyPluginCallback = (fastify: FastifyInstance, _options, next)
 
   fastify.route({
     method: "POST",
-    url: `${serviceUrl}/:id/migrated`,
-    preValidation: [fastify.authenticateOptional],
-    handler: documentsController.migrated.bind(documentsController),
-  });
-
-  fastify.route({
-    method: "POST",
     url: `${serviceUrl}/:id/level`,
     preValidation: [fastify.authenticateOptional],
     handler: documentsController.updateLevel.bind(documentsController),
