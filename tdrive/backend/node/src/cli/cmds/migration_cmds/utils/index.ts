@@ -1,21 +1,34 @@
 /* eslint-disable prettier/prettier */
 import axios from "axios";
 import config from "config";
-import { Readable } from "stream";
 
+export const DEFAULT_COMPANY = config.get<string>("drive.defaultCompany");
 export const COZY_DOMAIN = config.get<string>("migration.cozyDomain");
 const COZY_MANAGER_URL = config.get<string>("migration.cozyManagerUrl");
 const COZY_MANAGER_TOKEN = config.get<string>("migration.cozyManagerToken");
 const POLL_INTERVAL_MS = config.get<number>("migration.pollInterval");
 const MAX_RETRIES = config.get<number>("migration.maxRetries");
-export const DEFAULT_COMPANY = config.get<string>("drive.defaultCompany");
 
-export function streamToBuffer(stream: Readable): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on("data", chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    stream.on("end", () => resolve(Buffer.concat(chunks)));
-    stream.on("error", err => reject(err));
+function buildUploadUrl(baseUrl, params) {
+  const searchParams = new URLSearchParams(params);
+  return `${baseUrl}?${searchParams.toString()}`;
+}
+
+export function nodeReadableToWebReadable(readable, onProgress?: (chunkSize: number) => void) {
+  const reader = readable[Symbol.asyncIterator]();
+  return new ReadableStream({
+    async pull(controller) {
+      const { value, done } = await reader.next();
+      if (done) {
+        controller.close();
+      } else {
+        if (onProgress) onProgress(value.length); // report progress
+        controller.enqueue(value);
+      }
+    },
+    cancel() {
+      reader.return?.();
+    },
   });
 }
 
@@ -123,4 +136,32 @@ export async function getDriveToken(slugDomain: string): Promise<{ token: string
     );
     throw new Error(`Could not retrieve drive token for ${slugDomain}`);
   }
+}
+
+export async function uploadFile(
+  fileName: string,
+  userId: string,
+  fileDirPath: string,
+  userToken: string,
+  fileReadable: ReadableStream<any>,
+) {
+  const baseUrl = `https://${userId}.${COZY_DOMAIN}/files/${fileDirPath}`;
+  const params = {
+    Name: fileName,
+    Type: "file",
+    Executable: false,
+    Encrypted: false,
+    Size: "",
+  };
+  const uploadUrl = buildUploadUrl(baseUrl, params);
+  const resp = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${userToken}`,
+      "Content-Type": "application/octet-stream",
+    },
+    duplex: "half",
+    body: fileReadable,
+  } as RequestInit);
+  return resp;
 }

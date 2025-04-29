@@ -6,30 +6,13 @@ import yargs from "yargs";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
 import CozyClient from "cozy-client";
-import { COZY_DOMAIN, DEFAULT_COMPANY, getDriveToken } from "./utils";
-
-function buildUploadUrl(baseUrl, params) {
-  const searchParams = new URLSearchParams(params);
-  return `${baseUrl}?${searchParams.toString()}`;
-}
-
-function nodeReadableToWebReadable(readable, onProgress?: (chunkSize: number) => void) {
-  const reader = readable[Symbol.asyncIterator]();
-  return new ReadableStream({
-    async pull(controller) {
-      const { value, done } = await reader.next();
-      if (done) {
-        controller.close();
-      } else {
-        if (onProgress) onProgress(value.length); // report progress
-        controller.enqueue(value);
-      }
-    },
-    cancel() {
-      reader.return?.();
-    },
-  });
-}
+import {
+  uploadFile,
+  COZY_DOMAIN,
+  DEFAULT_COMPANY,
+  getDriveToken,
+  nodeReadableToWebReadable,
+} from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -153,24 +136,15 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                     totalSize > 0 ? ((uploadedBytes / totalSize) * 100).toFixed(2) : "0";
                   process.stdout.write(`\rUploading ${fileObject.name}... ${percentage}%`);
                 });
-                const baseUrl = `https://${userId}.stg.lin-saas.com/files/${fileDirPath}`;
-                const params = {
-                  Name: fileObject.name,
-                  Type: "file",
-                  Executable: false,
-                  Encrypted: false,
-                  Size: "",
-                };
-                const uploadUrl = buildUploadUrl(baseUrl, params);
-                const resp = await fetch(uploadUrl, {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${userToken.token}`,
-                    "Content-Type": "application/octet-stream",
-                  },
-                  duplex: "half",
-                  body: fileReadable,
-                } as RequestInit);
+
+                const resp = await uploadFile(
+                  fileObject.name,
+                  userId,
+                  fileDirPath,
+                  userToken.token,
+                  fileReadable,
+                );
+
                 if (!resp.ok) {
                   console.error(`❌ ERROR UPLOADING THE FILE: ${fileObject.name}`);
                   console.error(`❌ ERROR: ${JSON.stringify(resp)}  ${resp}`);
