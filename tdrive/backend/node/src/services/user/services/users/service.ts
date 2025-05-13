@@ -120,26 +120,25 @@ export class UserServiceImpl {
       throw CrudException.notFound(`User ${id} not found`);
     }
 
-    if (user.email_canonical !== body.email) {
+    const currentEmail = user.email_canonical;
+    const isChangeEmail = currentEmail !== body.email;
+
+    if (isChangeEmail) {
+      await gr.services.console.getClient().userWasDeletedForceLogout(currentEmail);
       const userByEmail = await gr.services.users.getByEmail(body.email, context);
       if (userByEmail) {
         throw CrudException.badRequest(`Email ${body.email} is existed`);
       }
     }
 
-    let isChangeEmail = false;
-    if (user.email_canonical !== body.email) {
-      isChangeEmail = true;
-    }
-
-    user.email_canonical = body.email || user.email_canonical;
+    user.email_canonical = body.email || currentEmail;
     user.first_name = body.first_name || user.first_name;
     user.last_name = body.last_name || user.last_name;
     user.picture = body.picture || user.picture;
     user.creation_date = !isNumber(user.creation_date) ? Date.now() : user.creation_date;
     if (isChangeEmail) {
       user.username_canonical = formatUsername(body.email);
-      user.identity_provider_id = user.identity_provider_id !== "null" ? body.email : "null";
+      user.identity_provider_id = user.identity_provider_id !== "null" ? currentEmail : "null";
     }
 
     await this.repository.save(user, context);
