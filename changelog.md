@@ -13,6 +13,7 @@
 - Added root folder for all uploads, document creation, and cleanup after
 - Add testing identifier to new upload modal
 - Add delete user endpoint.
+- Added migration cli commands for user(s) and file(s).
 
 ## Fixes and Improvements
 
