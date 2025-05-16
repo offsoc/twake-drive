@@ -1,3 +1,10 @@
+# Twake Drive v1.0.7-rc12
+
+## Fixes and Improvements
+
+- Fix sessions could not remove after delete account success
+- Fix bug cannot update email with account remote
+
 # Twake Drive v1.0.7
 
 ## Features
