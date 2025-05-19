@@ -1,3 +1,9 @@
+# Twake Drive v1.0.7-rc15
+
+## Features
+
+- Add flag to always allow share by link
+
 # Twake Drive v1.0.7-rc12
 
 ## Fixes and Improvements
