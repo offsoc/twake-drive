@@ -38,6 +38,7 @@ export async function createCozyInstance(user: {
   email: string;
   name: string;
   _id: string;
+  locale: string;
 }) {
   console.log(`🚀 Creating Cozy instance for ${user.email}...`);
 
@@ -51,7 +52,7 @@ export async function createCozyInstance(user: {
         domain: COZY_DOMAIN,
         email: user.email,
         public_name: user.name,
-        locale: "fr",
+        locale: user.locale,
         oidc: user.id,
       },
       {
