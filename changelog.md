@@ -23,6 +23,8 @@
 - Drive items are now properly removed from the search index when deleted
 - Faster listing for trash
 - Fix file/folder upload picker.
+- Config cozy offer for user(s) migration.
+- Fix default user locale for user(s) migration.
 
 # Twake Drive v1.0.6
 
