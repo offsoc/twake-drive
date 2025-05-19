@@ -30,7 +30,7 @@
 - Faster listing for trash
 - Fix file/folder upload picker.
 - Config cozy offer for user(s) migration.
-- Fix default user locale for user(s) migration.
+- Fix default user locale with preferences for user(s) migration.
 
 # Twake Drive v1.0.6
 
