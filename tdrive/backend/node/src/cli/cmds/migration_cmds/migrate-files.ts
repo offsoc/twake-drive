@@ -67,37 +67,38 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           console.log(`User ${user.id} has ${userFiles.getEntities().length} files`);
 
           const userFilesObjects = [];
-
+          const failedFiles: { id: string; name: string }[] = [];
           for (const userFile of userFiles.getEntities()) {
-            if (userFile.migrated) {
-              continue;
-            }
-            const filePathItems = await getPath(userFile.id, documentsRepo, true, {
-              company: { id: userCompany },
-            } as any);
+            let fileObject: any = {};
+            try {
+              if (userFile.migrated) {
+                continue;
+              }
+              const filePathItems = await getPath(userFile.id, documentsRepo, true, {
+                company: { id: userCompany },
+              } as any);
 
-            const filePath = filePathItems
-              .slice(1, -1)
-              .map(p => p.name)
-              .join("/");
+              const filePath = filePathItems
+                .slice(1, -1)
+                .map(p => p.name)
+                .join("/");
 
-            const fileObject = {
-              owner: userId,
-              _id: userFile.id,
-              is_in_trash: userFile.is_in_trash,
-              is_directory: userFile.is_directory,
-              name: userFile.name,
-              added: userFile.added,
-              last_modified: userFile.last_modified,
-              size: userFile.size,
-              path: filePath !== "My Drive" ? filePath : "",
-              company_id: userCompany,
-            };
+              fileObject = {
+                owner: userId,
+                _id: userFile.id,
+                is_in_trash: userFile.is_in_trash,
+                is_directory: userFile.is_directory,
+                name: userFile.name,
+                added: userFile.added,
+                last_modified: userFile.last_modified,
+                size: userFile.size,
+                path: filePath !== "My Drive" ? filePath : "",
+                company_id: userCompany,
+              };
 
-            userFilesObjects.push(fileObject);
+              userFilesObjects.push(fileObject);
 
-            if (!dryRun) {
-              try {
+              if (!dryRun) {
                 const cozyUrl = `${userId}.${COZY_DOMAIN}`;
                 const userToken = await getDriveToken(cozyUrl);
                 const client = new CozyClient({
@@ -124,7 +125,8 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 );
 
                 if (!archiveOrFile.file) {
-                  console.error(`File ${userFile.id} was returned as archive. Skipping.`);
+                  console.error(`⚠️ File ${userFile.id} was returned as archive. Skipping.`);
+                  failedFiles.push({ id: userFile.id, name: userFile.name });
                   continue;
                 }
                 let uploadedBytes = 0;
@@ -148,6 +150,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 if (!resp.ok) {
                   console.error(`❌ ERROR UPLOADING THE FILE: ${fileObject.name}`);
                   console.error(`❌ ERROR: ${JSON.stringify(resp)}  ${resp}`);
+                  failedFiles.push({ id: userFile.id, name: userFile.name });
                   continue;
                 }
                 // 3. Migrate file
@@ -156,13 +159,23 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 await documentsRepo.save(userFile);
 
                 console.log(`\n✅ File migrated successfully: ${fileObject.name}`);
-              } catch (error) {
-                console.error(`❌ ERROR CREATING THE FILE: ${fileObject.name}`);
-                console.error(`❌ ERROR: ${JSON.stringify(error)}  ${error}`);
+              } else {
+                console.log(
+                  `[DRY-RUN] Would create Cozy instance for user ${user.email_canonical}`,
+                );
               }
-            } else {
-              console.log(`[DRY-RUN] Would create Cozy instance for user ${user.email_canonical}`);
+            } catch (error) {
+              console.error(`❌ Exception while processing: ${fileObject.name}`);
+              console.error(error);
+              failedFiles.push({ id: userFile.id, name: userFile.name });
             }
+          }
+          if (failedFiles.length > 0) {
+            console.log("\n📋 Migration failed for the following files:");
+            console.table(failedFiles);
+            console.log(`❌ Total failed files: ${failedFiles.length}`);
+          } else {
+            console.log("\n🎉 All files migrated successfully. No failures.");
           }
         }
       });
