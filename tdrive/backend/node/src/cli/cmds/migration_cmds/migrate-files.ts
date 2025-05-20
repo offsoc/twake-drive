@@ -64,16 +64,41 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
 
-          console.log(`User ${user.id} has ${userFiles.getEntities().length} files`);
+          console.log(`User ${userId}::${user.id} has ${userFiles.getEntities().length} files`);
 
           const userFilesObjects = [];
-          const failedFiles: { id: string; name: string }[] = [];
+          const failedFiles: { id: string; name: string; reason?: string }[] = [];
           for (const userFile of userFiles.getEntities()) {
             let fileObject: any = {};
             try {
               if (userFile.migrated) {
                 continue;
               }
+
+              // Check if file exists in S3 storage
+              try {
+                const { exist } = await globalResolver.services.files.checkFileExistsS3(
+                  userFile.id,
+                );
+                if (!exist) {
+                  console.error(
+                    `⚠️ File ${userFile.id} (${userFile.name}) does not exist in S3 storage. Skipping.`,
+                  );
+                  failedFiles.push({
+                    id: userFile.id,
+                    name: userFile.name,
+                    reason: "Doesn't exist in S3 storage",
+                  });
+                  continue;
+                }
+              } catch (error) {
+                console.error(
+                  `⚠️ Error checking S3 storage for file ${userFile.id} (${userFile.name}): ${error.message}`,
+                );
+                failedFiles.push({ id: userFile.id, name: userFile.name, reason: error.message });
+                continue;
+              }
+
               const filePathItems = await getPath(userFile.id, documentsRepo, true, {
                 company: { id: userCompany },
               } as any);
