@@ -68,7 +68,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           const recursivelyDescend = async (parentId: string) => {
             if (visited.has(parentId)) return;
             visited.add(parentId);
-            const children = await documentsRepo.find({ parent: parentId });
+            const children = await documentsRepo.find({ parent_id: parentId });
             for (const child of children.getEntities()) {
               if (child.is_directory) {
                 await recursivelyDescend(child.id);
