@@ -62,22 +62,54 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
         for (const user of usersToMigrate) {
           const userCompany = DEFAULT_COMPANY;
           const userId = user.email_canonical.split("@")[0];
-          const userHomeDir = `user_${user.id}`;
-          const allUserFiles: DriveFile[] = [];
+
+          // Step 1: Direct files created by the user
+          const userFiles = await documentsRepo.find({
+            creator: user.id,
+            is_directory: false,
+          });
+
+          const allUserFiles: DriveFile[] = [...userFiles.getEntities()];
           const visited = new Set<string>();
-          const recursivelyDescend = async (parentId: string) => {
+
+          // Recursive function to descend only foreign folders
+          const recursivelyDescendForeign = async (parentId: string) => {
             if (visited.has(parentId)) return;
             visited.add(parentId);
+
             const children = await documentsRepo.find({ parent_id: parentId });
+
             for (const child of children.getEntities()) {
               if (child.is_directory) {
-                await recursivelyDescend(child.id);
+                if (!child.creator || child.creator !== user.id) {
+                  await recursivelyDescendForeign(child.id); // ✅ only descend into foreign folders
+                }
               } else {
-                allUserFiles.push(child);
+                allUserFiles.push(child); // ✅ add any file regardless of creator
               }
             }
           };
-          await recursivelyDescend(userHomeDir);
+
+          // Step 2: Find all folders created by the user
+          const userFolders = await documentsRepo.find({
+            creator: user.id,
+            is_directory: true,
+          });
+
+          // Step 3: For each user-owned folder, check direct children
+          for (const folder of userFolders.getEntities()) {
+            const children = await documentsRepo.find({ parent_id: folder.id });
+
+            for (const child of children.getEntities()) {
+              if (!child.creator || child.creator !== user.id) {
+                if (child.is_directory) {
+                  await recursivelyDescendForeign(child.id); // ✅ only if foreign folder
+                } else {
+                  allUserFiles.push(child); // ✅ foreign file inside user folder
+                }
+              }
+            }
+          }
 
           console.log(`User ${userId}::${user.id} has ${allUserFiles.length} files`);
 
