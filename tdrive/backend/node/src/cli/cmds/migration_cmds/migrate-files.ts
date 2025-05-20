@@ -61,17 +61,32 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
 
         for (const user of usersToMigrate) {
           const userCompany = DEFAULT_COMPANY;
-          const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const userId = user.email_canonical.split("@")[0];
+          const userHomeDir = `user_${user.id}`;
+          const allUserFiles: DriveFile[] = [];
+          const visited = new Set<string>();
+          const recursivelyDescend = async (parentId: string) => {
+            if (visited.has(parentId)) return;
+            visited.add(parentId);
+            const children = await documentsRepo.find({ parent: parentId });
+            for (const child of children.getEntities()) {
+              if (child.is_directory) {
+                await recursivelyDescend(child.id);
+              } else {
+                allUserFiles.push(child);
+              }
+            }
+          };
+          await recursivelyDescend(userHomeDir);
 
-          console.log(`User ${userId}::${user.id} has ${userFiles.getEntities().length} files`);
+          console.log(`User ${userId}::${user.id} has ${allUserFiles.length} files`);
 
           const userFilesObjects = [];
           const failedFiles: { id: string; name: string; reason?: string }[] = [];
-          for (const userFile of userFiles.getEntities()) {
+          for (const userFile of allUserFiles) {
             let fileObject: any = {};
             try {
-              if (userFile.migrated) {
+              if (userFile.migrated || userFile.is_in_trash) {
                 continue;
               }
 
