@@ -17,32 +17,18 @@ function buildUploadUrl(baseUrl, params) {
 
 export function nodeReadableToWebReadable(readable, onProgress?: (chunkSize: number) => void) {
   const reader = readable[Symbol.asyncIterator]();
-
   return new ReadableStream({
     async pull(controller) {
-      try {
-        const { value, done } = await reader.next();
-
-        if (done) {
-          controller.close();
-          return;
-        }
-
-        if (onProgress) onProgress(value.length);
+      const { value, done } = await reader.next();
+      if (done) {
+        controller.close();
+      } else {
+        if (onProgress) onProgress(value.length); // report progress
         controller.enqueue(value);
-
-        // Backpressure: wait if the stream's internal queue is full
-        while (controller.desiredSize !== null && controller.desiredSize <= 0) {
-          // Let the event loop breathe so the consumer can catch up
-          await new Promise(resolve => setTimeout(resolve, 1));
-        }
-      } catch (err) {
-        controller.error(err);
       }
     },
-
     cancel() {
-      if (reader.return) return reader.return();
+      reader.return?.();
     },
   });
 }
