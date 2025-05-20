@@ -65,18 +65,24 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           const userHomeDir = `user_${user.id}`;
           const allUserFiles: DriveFile[] = [];
           const visited = new Set<string>();
+
+          let fileCount = 0;
           const recursivelyDescend = async (parentId: string) => {
             if (visited.has(parentId)) return;
             visited.add(parentId);
+
             const children = await documentsRepo.find({ parent_id: parentId });
             for (const child of children.getEntities()) {
               if (child.is_directory) {
                 await recursivelyDescend(child.id);
               } else {
                 allUserFiles.push(child);
+                fileCount++;
+                process.stdout.write(`\rDiscovered files: ${fileCount}`);
               }
             }
           };
+
           await recursivelyDescend(userHomeDir);
 
           console.log(`User ${userId}::${user.id} has ${allUserFiles.length} files`);
