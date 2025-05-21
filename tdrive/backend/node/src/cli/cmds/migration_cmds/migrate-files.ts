@@ -57,6 +57,12 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           const userCompany = DEFAULT_COMPANY;
           const userId = user.email_canonical.split("@")[0];
           const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
+          const cozyUrl = `${userId}.${COZY_DOMAIN}`;
+          const userToken = await getDriveToken(cozyUrl);
+          const client = new CozyClient({
+            uri: `https://${cozyUrl}`,
+            token: userToken.token,
+          });
 
           console.log(`User ${userId}::${user.id} has ${userFiles.getEntities().length} files`);
 
@@ -118,13 +124,6 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
               userFilesObjects.push(fileObject);
 
               if (!dryRun) {
-                const cozyUrl = `${userId}.${COZY_DOMAIN}`;
-                const userToken = await getDriveToken(cozyUrl);
-                const client = new CozyClient({
-                  uri: `https://${cozyUrl}`,
-                  token: userToken.token,
-                });
-
                 let fileDirPath = "io.cozy.files.root-dir";
                 if (fileObject.path !== "") {
                   const sanitizedPath = fileObject.path.replace(/^\//, "");
@@ -167,6 +166,8 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   fileStream,
                   onProgress,
                 );
+
+                fileStream.destroy();
 
                 if (statusCode !== 201) {
                   console.error(`❌ ERROR UPLOADING THE FILE: ${fileObject.name}`);
