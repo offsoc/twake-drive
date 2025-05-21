@@ -6,13 +6,7 @@ import yargs from "yargs";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
 import CozyClient from "cozy-client";
-import {
-  uploadFile,
-  COZY_DOMAIN,
-  DEFAULT_COMPANY,
-  getDriveToken,
-  nodeReadableToWebReadable,
-} from "./utils";
+import { uploadFile, COZY_DOMAIN, DEFAULT_COMPANY, getDriveToken } from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -195,27 +189,29 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   failedFiles.push({ id: userFile.id, name: userFile.name });
                   continue;
                 }
+                const { file: fileStream } = archiveOrFile.file;
                 let uploadedBytes = 0;
                 const totalSize = fileObject.size || 0;
-                const { file: fileStream } = archiveOrFile.file;
-                const fileReadable = nodeReadableToWebReadable(fileStream, chunkSize => {
+
+                const onProgress = (chunkSize: number) => {
                   uploadedBytes += chunkSize;
                   const percentage =
                     totalSize > 0 ? ((uploadedBytes / totalSize) * 100).toFixed(2) : "0";
-                  process.stdout.write(`\rUploading ${fileObject.name}... ${percentage}%`);
-                });
+                  process.stdout.write(`\r⬆️ Uploading ${fileObject.name}... ${percentage}%`);
+                };
 
-                const resp = await uploadFile(
+                const { statusCode, body } = await uploadFile(
                   fileObject.name,
                   userId,
                   fileDirPath,
                   userToken.token,
-                  fileReadable,
+                  fileStream,
+                  onProgress,
                 );
 
-                if (!resp.ok) {
+                if (statusCode !== 201) {
                   console.error(`❌ ERROR UPLOADING THE FILE: ${fileObject.name}`);
-                  console.error(`❌ ERROR: ${JSON.stringify(resp)}  ${resp}`);
+                  console.error(`❌ ERROR: ${JSON.stringify(body)}  ${body}`);
                   failedFiles.push({ id: userFile.id, name: userFile.name });
                   continue;
                 }
