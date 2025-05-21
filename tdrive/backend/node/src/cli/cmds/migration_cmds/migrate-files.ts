@@ -134,7 +134,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 // 2. Download file from backend
                 const archiveOrFile = await globalResolver.services.documents.documents.download(
                   userFile.id,
-                  userFile.last_version_cache.id,
+                  null,
                   null, // No archive callback needed
                   {
                     company: { id: userCompany },
