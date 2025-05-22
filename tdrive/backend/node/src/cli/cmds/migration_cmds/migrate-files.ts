@@ -56,7 +56,6 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
         for (const user of usersToMigrate) {
           const userCompany = DEFAULT_COMPANY;
           const userId = user.email_canonical.split("@")[0];
-          const userFiles = await documentsRepo.find({ creator: user.id, is_directory: false });
           const cozyUrl = `${userId}.${COZY_DOMAIN}`;
           const userToken = await getDriveToken(cozyUrl);
           const client = new CozyClient({
@@ -64,11 +63,52 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
             token: userToken.token,
           });
 
-          console.log(`User ${userId}::${user.id} has ${userFiles.getEntities().length} files`);
+          const userHomeDir = `user_${user.id}`;
+          const allUserFiles: DriveFile[] = [];
+          const visited = new Set<string>();
+
+          let fileCount = 0;
+          let dirCount = 0;
+
+          const recursivelyDescend = async (parentId: string) => {
+            if (visited.has(parentId)) {
+              return;
+            }
+
+            visited.add(parentId);
+            dirCount++;
+            process.stdout.write(
+              `\rVisited directories: ${dirCount}, Discovered files: ${fileCount}`,
+            );
+
+            let children;
+            try {
+              children = await documentsRepo.find({ company_id: userCompany, parent_id: parentId });
+            } catch (err) {
+              console.error(`\nError fetching children for ${parentId}:`, err);
+              return;
+            }
+
+            for (const child of children.getEntities()) {
+              if (child.is_directory) {
+                await recursivelyDescend(child.id);
+              } else {
+                allUserFiles.push(child);
+                fileCount++;
+                process.stdout.write(
+                  `\rVisited directories: ${dirCount}, Discovered files: ${fileCount}`,
+                );
+              }
+            }
+          };
+
+          await recursivelyDescend(userHomeDir);
+
+          console.log(`User ${userId}::${user.id} has ${allUserFiles.length} files`);
 
           const userFilesObjects = [];
           const failedFiles: { id: string; name: string; reason?: string }[] = [];
-          for (const userFile of userFiles.getEntities()) {
+          for (const userFile of allUserFiles) {
             let fileObject: any = {};
             try {
               if (userFile.migrated || userFile.is_in_trash) {
