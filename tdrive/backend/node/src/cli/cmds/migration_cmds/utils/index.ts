@@ -11,6 +11,22 @@ const COZY_MANAGER_URL = config.get<string>("migration.cozyManagerUrl");
 const COZY_MANAGER_TOKEN = config.get<string>("migration.cozyManagerToken");
 const POLL_INTERVAL_MS = config.get<number>("migration.pollInterval");
 const MAX_RETRIES = config.get<number>("migration.maxRetries");
+const INITIAL_DELAY_MS = 500;
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableError(error: any): boolean {
+  // Customize this as needed for your HTTP client
+  return (
+    error?.code === "ENOTFOUND" || // DNS resolution failed
+    error?.code === "EAI_AGAIN" || // DNS lookup timeout
+    error?.code === "ECONNRESET" || // Connection reset by peer
+    error?.code === "ETIMEDOUT" || // Request timed out
+    error?.code === "ECONNREFUSED" // Server unavailable
+  );
+}
 
 function buildUploadUrl(baseUrl, params) {
   const searchParams = new URLSearchParams(params);
@@ -162,13 +178,27 @@ export async function uploadFile(
   fileReadable.on("data", chunk => {
     if (onProgress) onProgress(chunk.length);
   });
-  const { statusCode, body } = await request(uploadUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${userToken}`,
-      "Content-Type": "application/octet-stream",
-    },
-    body: fileReadable,
-  });
-  return { statusCode, body };
+  let attempt = 0;
+  let lastError: any;
+  while (attempt < MAX_RETRIES) {
+    try {
+      const { statusCode, body } = await request(uploadUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/octet-stream",
+        },
+        body: fileReadable,
+      });
+      return { statusCode, body };
+    } catch (err) {
+      if (!isRetryableError(err)) throw err;
+      lastError = err;
+      attempt++;
+      const backoff = INITIAL_DELAY_MS * 2 ** attempt + Math.random() * 100;
+      console.warn(`Upload failed (attempt ${attempt}), retrying in ${backoff}ms...`, err.code);
+      await sleep(backoff);
+    }
+  }
+  throw new Error(`Upload failed after ${MAX_RETRIES} retries: ${lastError?.message || lastError}`);
 }

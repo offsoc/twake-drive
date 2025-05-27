@@ -52,8 +52,22 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
             specifiedEmails.includes(user.email_canonical.toLowerCase()),
           );
         }
+        const migrationResult = [];
 
         for (const user of usersToMigrate) {
+          const migrationSummary = {
+            user: user.email_canonical,
+            userId: user.id,
+            totalFiles: 0,
+            migratedFiles: 0,
+            failedFiles: [] as {
+              id: string;
+              name: string;
+              reason?: string;
+              stacktrace?: string;
+            }[],
+          };
+
           const userCompany = DEFAULT_COMPANY;
           const userId = user.email_canonical.split("@")[0];
           const cozyUrl = `${userId}.${COZY_DOMAIN}`;
@@ -103,11 +117,11 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           };
 
           await recursivelyDescend(userHomeDir);
+          migrationSummary.totalFiles = allUserFiles.length;
 
           console.log(`User ${userId}::${user.id} has ${allUserFiles.length} files`);
 
           const userFilesObjects = [];
-          const failedFiles: { id: string; name: string; reason?: string }[] = [];
           for (const userFile of allUserFiles) {
             let fileObject: any = {};
             try {
@@ -124,10 +138,11 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   console.error(
                     `⚠️ File ${userFile.id} (${userFile.name}) does not exist in S3 storage. Skipping.`,
                   );
-                  failedFiles.push({
+                  migrationSummary.failedFiles.push({
                     id: userFile.id,
                     name: userFile.name,
                     reason: "Doesn't exist in S3 storage",
+                    stacktrace: "",
                   });
                   continue;
                 }
@@ -135,7 +150,12 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 console.error(
                   `⚠️ Error checking S3 storage for file ${userFile.id} (${userFile.name}): ${error.message}`,
                 );
-                failedFiles.push({ id: userFile.id, name: userFile.name, reason: error.message });
+                migrationSummary.failedFiles.push({
+                  id: userFile.id,
+                  name: userFile.name,
+                  reason: error.message,
+                  stacktrace: "",
+                });
                 continue;
               }
 
@@ -184,7 +204,12 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
 
                 if (!archiveOrFile.file) {
                   console.error(`⚠️ File ${userFile.id} was returned as archive. Skipping.`);
-                  failedFiles.push({ id: userFile.id, name: userFile.name });
+                  migrationSummary.failedFiles.push({
+                    id: userFile.id,
+                    name: userFile.name,
+                    reason: "Returned as archive",
+                    stacktrace: "",
+                  });
                   continue;
                 }
                 const { file: fileStream } = archiveOrFile.file;
@@ -212,7 +237,12 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 if (statusCode !== 201) {
                   console.error(`❌ ERROR UPLOADING THE FILE: ${fileObject.name}`);
                   console.error(`❌ ERROR: ${JSON.stringify(body)}  ${body}`);
-                  failedFiles.push({ id: userFile.id, name: userFile.name });
+                  migrationSummary.failedFiles.push({
+                    id: userFile.id,
+                    name: userFile.name,
+                    reason: "Upload failed",
+                    stacktrace: JSON.stringify(body),
+                  });
                   continue;
                 }
                 // 3. Migrate file
@@ -228,18 +258,36 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
               }
             } catch (error) {
               console.error(`❌ Exception while processing: ${fileObject.name}`);
+              migrationSummary.failedFiles.push({
+                id: userFile.id,
+                name: userFile.name,
+                reason: error.message,
+                stacktrace: error.stack || "",
+              });
               console.error(error);
-              failedFiles.push({ id: userFile.id, name: userFile.name });
             }
           }
-          if (failedFiles.length > 0) {
+          if (migrationSummary.failedFiles.length > 0) {
             console.log("\n📋 Migration failed for the following files:");
-            console.table(failedFiles);
-            console.log(`❌ Total failed files: ${failedFiles.length}`);
+            console.table(migrationSummary.failedFiles);
+            console.log(`❌ Total failed files: ${migrationSummary.failedFiles.length}`);
           } else {
             console.log("\n🎉 All files migrated successfully. No failures.");
           }
+          migrationResult.push({
+            user: user.email_canonical,
+            summary: migrationSummary,
+          });
         }
+        console.log("\nMigration Summary:");
+        console.table(
+          migrationResult.map(result => ({
+            user: result.user,
+            totalFiles: result.summary.totalFiles,
+            migratedFiles: result.summary.migratedFiles,
+            failedFiles: result.summary.failedFiles.length,
+          })),
+        );
       });
     });
   },
