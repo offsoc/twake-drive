@@ -125,7 +125,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
           for (const userFile of allUserFiles) {
             let fileObject: any = {};
             try {
-              if (userFile.migrated || userFile.is_in_trash) {
+              if (userFile.is_in_trash) {
                 continue;
               }
 
