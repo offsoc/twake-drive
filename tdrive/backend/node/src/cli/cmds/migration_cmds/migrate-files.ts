@@ -6,7 +6,14 @@ import yargs from "yargs";
 import { DriveFile, TYPE } from "../../../services/documents/entities/drive-file";
 import { getPath } from "../../../services/documents/utils";
 import CozyClient from "cozy-client";
-import { uploadFile, COZY_DOMAIN, DEFAULT_COMPANY, getDriveToken } from "./utils";
+import {
+  uploadFile,
+  COZY_DOMAIN,
+  DEFAULT_COMPANY,
+  getDriveToken,
+  recordMigration,
+  COZY_MIGRATION_TARGET_USERS,
+} from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-files",
@@ -28,8 +35,15 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
     const dryRun = argv.dryRun as boolean;
     console.log("DRY RUN: ", dryRun);
     const emailsArg = argv.emails as string | undefined;
-    const specifiedEmails = emailsArg
+    const cliEmails = emailsArg
       ? emailsArg.split(",").map(email => email.trim().toLowerCase())
+      : null;
+
+    // Priority: COZY_MIGRATION_TARGET_USERS > CLI > all
+    const specifiedEmails = COZY_MIGRATION_TARGET_USERS.length
+      ? COZY_MIGRATION_TARGET_USERS
+      : cliEmails.length
+      ? cliEmails
       : null;
 
     if (specifiedEmails) {
@@ -138,9 +152,21 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   console.error(
                     `⚠️ File ${userFile.id} (${userFile.name}) does not exist in S3 storage. Skipping.`,
                   );
+
                   migrationSummary.failedFiles.push({
                     id: userFile.id,
                     name: userFile.name,
+                    reason: "Doesn't exist in S3 storage",
+                    stacktrace: "",
+                  });
+
+                  // Record the migration failure in the sqlite database
+                  recordMigration({
+                    userEmail: user.email_canonical,
+                    userId: user.id,
+                    fileId: userFile.id,
+                    fileName: userFile.name,
+                    success: false,
                     reason: "Doesn't exist in S3 storage",
                     stacktrace: "",
                   });
@@ -155,6 +181,17 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   name: userFile.name,
                   reason: error.message,
                   stacktrace: "",
+                });
+
+                // Record the migration failure in the sqlite database
+                recordMigration({
+                  userEmail: user.email_canonical,
+                  userId: user.id,
+                  fileId: userFile.id,
+                  fileName: userFile.name,
+                  success: false,
+                  reason: error.message,
+                  stacktrace: error.stack || "",
                 });
                 continue;
               }
@@ -210,6 +247,17 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                     reason: "Returned as archive",
                     stacktrace: "",
                   });
+
+                  // Record the migration failure in the sqlite database
+                  recordMigration({
+                    userEmail: user.email_canonical,
+                    userId: user.id,
+                    fileId: userFile.id,
+                    fileName: userFile.name,
+                    success: false,
+                    reason: "Returned as archive",
+                    stacktrace: "",
+                  });
                   continue;
                 }
                 const { file: fileStream } = archiveOrFile.file;
@@ -232,6 +280,15 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   onProgress,
                 );
 
+                // Record the migration success in the sqlite database
+                recordMigration({
+                  userEmail: user.email_canonical,
+                  userId: user.id,
+                  fileId: userFile.id,
+                  fileName: userFile.name,
+                  success: true,
+                });
+
                 fileStream.destroy();
 
                 if (statusCode !== 201) {
@@ -240,6 +297,17 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                   migrationSummary.failedFiles.push({
                     id: userFile.id,
                     name: userFile.name,
+                    reason: "Upload failed",
+                    stacktrace: JSON.stringify(body),
+                  });
+
+                  // Record the migration failure in the sqlite database
+                  recordMigration({
+                    userEmail: user.email_canonical,
+                    userId: user.id,
+                    fileId: userFile.id,
+                    fileName: userFile.name,
+                    success: false,
                     reason: "Upload failed",
                     stacktrace: JSON.stringify(body),
                   });
@@ -261,6 +329,17 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
               migrationSummary.failedFiles.push({
                 id: userFile.id,
                 name: userFile.name,
+                reason: error.message,
+                stacktrace: error.stack || "",
+              });
+
+              // Record the migration failure in the sqlite database
+              recordMigration({
+                userEmail: user.email_canonical,
+                userId: user.id,
+                fileId: userFile.id,
+                fileName: userFile.name,
+                success: false,
                 reason: error.message,
                 stacktrace: error.stack || "",
               });

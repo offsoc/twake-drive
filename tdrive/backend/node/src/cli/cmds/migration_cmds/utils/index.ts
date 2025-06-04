@@ -3,9 +3,20 @@ import axios from "axios";
 import config from "config";
 import { Readable } from "stream";
 import { request } from "undici";
+import db from "./migration-db";
 
 export const DEFAULT_COMPANY = config.get<string>("drive.defaultCompany");
 export const COZY_DOMAIN = config.get<string>("migration.cozyDomain");
+
+const COZY_MIGRATION_EMAILS = config.get<string[]>("migration.cozyMigrationEmails");
+const COZY_MIGRATION_SKIP = config.get<number>("migration.cozyMigrationSkip");
+const COZY_MIGRATION_LIMIT = config.get<number>("migration.cozyMigrationLimit");
+
+export const COZY_MIGRATION_TARGET_USERS = COZY_MIGRATION_EMAILS.slice(
+  COZY_MIGRATION_SKIP,
+  COZY_MIGRATION_SKIP + COZY_MIGRATION_LIMIT
+);
+
 const COZY_OFFER = config.get<string>("migration.cozyOffer");
 const COZY_MANAGER_URL = config.get<string>("migration.cozyManagerUrl");
 const COZY_MANAGER_TOKEN = config.get<string>("migration.cozyManagerToken");
@@ -20,11 +31,11 @@ function sleep(ms: number) {
 function isRetryableError(error: any): boolean {
   // Customize this as needed for your HTTP client
   return (
-    error?.code === "ENOTFOUND" || // DNS resolution failed
-    error?.code === "EAI_AGAIN" || // DNS lookup timeout
+    error?.code === "ENOTFOUND"  || // DNS resolution failed
+    error?.code === "EAI_AGAIN"  || // DNS lookup timeout
     error?.code === "ECONNRESET" || // Connection reset by peer
-    error?.code === "ETIMEDOUT" || // Request timed out
-    error?.code === "ECONNREFUSED" // Server unavailable
+    error?.code === "ETIMEDOUT"  || // Request timed out
+    error?.code === "ECONNREFUSED"
   );
 }
 
@@ -201,4 +212,30 @@ export async function uploadFile(
     }
   }
   throw new Error(`Upload failed after ${MAX_RETRIES} retries: ${lastError?.message || lastError}`);
+}
+
+export function recordMigration({
+  userEmail,
+  userId,
+  fileId,
+  fileName,
+  success,
+  reason = null,
+  stacktrace = null,
+}: {
+  userEmail: string;
+  userId: string;
+  fileId: string;
+  fileName: string;
+  success: boolean;
+  reason?: string | null;
+  stacktrace?: string | null;
+}) {
+  db.prepare(
+    `
+    INSERT INTO migration_report
+    (user_email, user_id, file_id, file_name, success, reason, stacktrace, migrated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+  ).run(userEmail, userId, fileId, fileName, success ? 1 : 0, reason, stacktrace, Date.now());
 }
