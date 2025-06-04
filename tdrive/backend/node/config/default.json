@@ -150,6 +150,9 @@
     "deleteInfectedFiles": false
   },
   "migration": {
+    "cozyMigrationEmails": "[]",
+    "cozyMigrationSkip": 0,
+    "cozyMigrationLimit": 1,
     "cozyDomain": "stg.lin-saas.com",
     "cozyOffer": "stg",
     "cozyManagerUrl": "https://manager-int.cozycloud.cc/api/public",

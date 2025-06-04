@@ -164,6 +164,9 @@
     "deleteInfectedFiles": "AV_DELETE_INFECTED_FILES"
   },
   "migration": {
+    "cozyMigrationEmails": "COZY_MIGRATION_EMAILS",
+    "cozyMigrationSkip": "COZY_MIGRATION_SKIP",
+    "cozyMigrationLimit": "COZY_MIGRATION_LIMIT",
     "cozyDomain": "COZY_DOMAIN",
     "cozyOffer": "COZY_OFFER",
     "cozyManagerUrl": "COZY_MANAGER_URL",
