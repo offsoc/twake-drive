@@ -150,7 +150,7 @@
     "deleteInfectedFiles": false
   },
   "migration": {
-    "cozyMigrationEmails": "[]",
+    "cozyMigrationEmails": "",
     "cozyMigrationSkip": 0,
     "cozyMigrationLimit": 1,
     "cozyDomain": "stg.lin-saas.com",

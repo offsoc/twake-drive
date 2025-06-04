@@ -8,11 +8,15 @@ import db from "./migration-db";
 export const DEFAULT_COMPANY = config.get<string>("drive.defaultCompany");
 export const COZY_DOMAIN = config.get<string>("migration.cozyDomain");
 
-const COZY_MIGRATION_EMAILS = config.get<string[]>("migration.cozyMigrationEmails");
+const COZY_MIGRATION_EMAILS = config.get<string>("migration.cozyMigrationEmails");
 const COZY_MIGRATION_SKIP = config.get<number>("migration.cozyMigrationSkip");
 const COZY_MIGRATION_LIMIT = config.get<number>("migration.cozyMigrationLimit");
 
-export const COZY_MIGRATION_TARGET_USERS = COZY_MIGRATION_EMAILS.slice(
+const allEmails = COZY_MIGRATION_EMAILS.trim()
+  ? COZY_MIGRATION_EMAILS.split(",").map(email => email.trim()).filter(Boolean)
+  : [];
+
+export const COZY_MIGRATION_TARGET_USERS = allEmails.slice(
   COZY_MIGRATION_SKIP,
   COZY_MIGRATION_SKIP + COZY_MIGRATION_LIMIT
 );
