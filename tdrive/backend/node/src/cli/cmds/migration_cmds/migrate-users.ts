@@ -67,7 +67,7 @@ const migrateUsersCommand: yargs.CommandModule<unknown, unknown> = {
             email: user.email_canonical,
             name: `${user.first_name} ${user.last_name}`,
             locale: user.preferences?.locale || "fr",
-            phone
+            phone,
           };
 
           if (!dryRun) {

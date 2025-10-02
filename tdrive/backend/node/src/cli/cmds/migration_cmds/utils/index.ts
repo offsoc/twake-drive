@@ -55,7 +55,7 @@ export async function createCozyInstance(user: {
         public_name: user.name,
         locale: user.locale,
         oidc: user.id,
-        phone: user.phone
+        phone: user.phone,
       },
       {
         headers: {
