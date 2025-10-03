@@ -39,6 +39,7 @@ export async function createCozyInstance(user: {
   name: string;
   _id: string;
   locale: string;
+  phone: string;
 }) {
   console.log(`🚀 Creating Cozy instance for ${user.email}...`);
 
@@ -54,6 +55,7 @@ export async function createCozyInstance(user: {
         public_name: user.name,
         locale: user.locale,
         oidc: user.id,
+        phone: user.phone,
       },
       {
         headers: {

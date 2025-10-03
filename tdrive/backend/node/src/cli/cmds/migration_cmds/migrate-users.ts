@@ -4,6 +4,7 @@ import globalResolver from "../../../services/global-resolver";
 import User from "../../../services/user/entities/user";
 import yargs from "yargs";
 import { createCozyInstance } from "./utils";
+import { getLDAPUserMobile } from "./utils/ldap";
 
 const migrateUsersCommand: yargs.CommandModule<unknown, unknown> = {
   command: "migrate-users",
@@ -59,12 +60,14 @@ const migrateUsersCommand: yargs.CommandModule<unknown, unknown> = {
 
         for (const user of usersToMigrate) {
           const userId = user.email_canonical.split("@")[0];
+          const phone = await getLDAPUserMobile(userId);
           const userObject = {
             _id: user.id,
             id: userId,
             email: user.email_canonical,
             name: `${user.first_name} ${user.last_name}`,
             locale: user.preferences?.locale || "fr",
+            phone,
           };
 
           if (!dryRun) {
