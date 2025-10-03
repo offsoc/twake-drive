@@ -57,11 +57,13 @@ function searchForUserMobile(
   config: LdapConfig,
   username: string,
 ): Promise<string | null> {
+  console.log(`searching for user ${username} mobile in LDAP`);
+
   return new Promise((resolve, reject) => {
     client.search(
       config.searchBase,
       {
-        filter: `(&(objectClass=inetorgperson)(uid=${username}))`,
+        filter: `(&(objectClass=*)(uid=${username}))`,
         attributes: ["mobile"],
         scope: "sub",
       },
