@@ -3,7 +3,7 @@ import runWithLoggerLevel from "../../utils/run-with-logger-level";
 import globalResolver from "../../../services/global-resolver";
 import User from "../../../services/user/entities/user";
 import yargs from "yargs";
-import { createCozyInstance } from "./utils";
+import { createCozyInstance, sanitizeSlug } from "./utils";
 import { getLDAPUserMobile } from "./utils/ldap";
 
 const migrateUsersCommand: yargs.CommandModule<unknown, unknown> = {
@@ -79,8 +79,10 @@ const migrateUsersCommand: yargs.CommandModule<unknown, unknown> = {
             }
           } else {
             console.log(
-              `[DRY-RUN] Would create Cozy instance for user ${user.email_canonical} and slug ${sanitizeSlug(userId)} with the following params`,
-              userObject
+              `[DRY-RUN] Would create Cozy instance for user ${
+                user.email_canonical
+              } and slug ${sanitizeSlug(userId)} with the following params`,
+              userObject,
             );
           }
         }
