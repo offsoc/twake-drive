@@ -162,7 +162,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 console.log(`\n✅ File migrated successfully: ${fileObject.name}`);
               } else {
                 console.log(
-                  `[DRY-RUN] Would migrate ${user.email_canonical} file: ${fileObject.name}`,
+                  `[DRY-RUN] Would migrate ${user.email_canonical} for slug ${sanitizeSlug(userId)} file: ${fileObject.name}`,
                 );
               }
             } catch (error) {
