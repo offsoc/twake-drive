@@ -78,7 +78,10 @@ const migrateUsersCommand: yargs.CommandModule<unknown, unknown> = {
               // Even if error, continue to next user
             }
           } else {
-            console.log(`[DRY-RUN] Would create Cozy instance for user ${user.email_canonical}`);
+            console.log(
+              `[DRY-RUN] Would create Cozy instance for user ${user.email_canonical} with the following params`,
+              userObject
+            );
           }
         }
       });
