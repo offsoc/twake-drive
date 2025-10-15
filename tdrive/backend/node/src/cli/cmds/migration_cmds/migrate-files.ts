@@ -12,6 +12,7 @@ import {
   DEFAULT_COMPANY,
   getDriveToken,
   nodeReadableToWebReadable,
+  sanitizeSlug,
 } from "./utils";
 
 const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
@@ -99,7 +100,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
               userFilesObjects.push(fileObject);
 
               if (!dryRun) {
-                const cozyUrl = `${userId}.${COZY_DOMAIN}`;
+                const cozyUrl = `${sanitizeSlug(userId)}.${COZY_DOMAIN}`;
                 const userToken = await getDriveToken(cozyUrl);
                 const client = new CozyClient({
                   uri: `https://${cozyUrl}`,
@@ -161,7 +162,7 @@ const purgeIndexesCommand: yargs.CommandModule<unknown, unknown> = {
                 console.log(`\n✅ File migrated successfully: ${fileObject.name}`);
               } else {
                 console.log(
-                  `[DRY-RUN] Would create Cozy instance for user ${user.email_canonical}`,
+                  `[DRY-RUN] Would migrate ${user.email_canonical} for slug ${sanitizeSlug(userId)} file: ${fileObject.name}`,
                 );
               }
             } catch (error) {

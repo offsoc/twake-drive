@@ -49,7 +49,7 @@ export async function createCozyInstance(user: {
       `${COZY_MANAGER_URL}/instances`,
       {
         offer: COZY_OFFER,
-        slug: user.id,
+        slug: sanitizeSlug(user.id),
         domain: COZY_DOMAIN,
         email: user.email,
         public_name: user.name,
@@ -149,7 +149,7 @@ export async function uploadFile(
   userToken: string,
   fileReadable: ReadableStream<any>,
 ) {
-  const baseUrl = `https://${userId}.${COZY_DOMAIN}/files/${fileDirPath}`;
+  const baseUrl = `https://${sanitizeSlug(userId)}.${COZY_DOMAIN}/files/${fileDirPath}`;
   const params = {
     Name: fileName,
     Type: "file",
@@ -169,3 +169,11 @@ export async function uploadFile(
   } as RequestInit);
   return resp;
 }
+
+/**
+ * Remove dots from userId to match the slug format
+ *
+ * @param {string} userId - the username to clean
+ * @returns {string} - the sanitized slug
+ */
+export const sanitizeSlug = (userId: string): string => userId.replaceAll(/\./g, "");
